@@ -100,17 +100,21 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
     SCInputRef UseThreeKPIs = sc.Input[5];
     SCInputRef MinBarVolume = sc.Input[6];
 
-    SCSubgraphRef CumSum = sc.Subgraph[0];
-    SCSubgraphRef CumSumAskTBidT = sc.Subgraph[1];
-    SCSubgraphRef CumSumUpDownT = sc.Subgraph[2];
+    SCSubgraphRef Grid = sc.Subgraph[0];
+    SCSubgraphRef CumSumAskVBidV = sc.Subgraph[1];
+    SCSubgraphRef CumSumTotalV = sc.Subgraph[2];
+    SCSubgraphRef CumSumAskTBidT = sc.Subgraph[3];
+    SCSubgraphRef CumSumUpDownT = sc.Subgraph[4];
+    SCSubgraphRef FracSignedImbalance = sc.Subgraph[5];
 
-    SCSubgraphRef UpOrDownCLean = sc.Subgraph[3];
-    SCSubgraphRef EnterSignal = sc.Subgraph[4];
+    // SCSubgraphRef UpOrDownCLean = sc.Subgraph[5];
+    // SCSubgraphRef EnterSignal = sc.Subgraph[6];
 
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
 
         sc.GraphName = "Strategy basic flag";
+        sc.GraphDrawType = GDT_NUMERIC_INFORMATION;
 
         // The Study
         InputStudy.Name = "Study to sum";
@@ -132,18 +136,61 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
         CumulativeThresholdSell.SetIntLimits(1, 5000);
         CumulativeThresholdSell.SetInt(200);
 
-        MinBarVolume.Name = "Use all three volume KPIs";
+        MinBarVolume.Name = "Min Volume for trade entry";
         MinBarVolume.SetIntLimits(0, 10000);
         MinBarVolume.SetInt(1000);
 
         UseThreeKPIs.Name = "Use all three volume KPIs";
         UseThreeKPIs.SetYesNo(0);
 
-        CumSum.Name = "Clean tick diff cumulative sum";
-        UpOrDownCLean.Name = "Up or down clean";
-        EnterSignal.Name = "Enter signal";
+        Grid.Name = "Grid style";
+        Grid.DrawStyle = DRAWSTYLE_LINE;
+        Grid.PrimaryColor = COLOR_WHITE;
+
+        CumSumAskVBidV.Name = "AskV - BidV";
+        CumSumAskVBidV.DrawStyle = DRAWSTYLE_LINE;
+        CumSumAskVBidV.PrimaryColor = COLOR_WHITE;
+
+        CumSumTotalV.Name = "Total V";
+        CumSumTotalV.DrawStyle = DRAWSTYLE_LINE;
+        CumSumTotalV.PrimaryColor = COLOR_WHITE;
+
+        CumSumAskTBidT.Name = "AskT - BidT";
+        CumSumAskTBidT.DrawStyle = DRAWSTYLE_LINE;
+        CumSumAskTBidT.PrimaryColor = COLOR_WHITE;
+
+        CumSumUpDownT.Name = "Up Down Tick Volume Difference";
+        CumSumUpDownT.DrawStyle = DRAWSTYLE_LINE;
+        CumSumUpDownT.PrimaryColor = COLOR_WHITE;
+
+        FracSignedImbalance.Name = "(AskV - BidV) / TotalV";
+        FracSignedImbalance.DrawStyle = DRAWSTYLE_LINE;
+        FracSignedImbalance.PrimaryColor = COLOR_WHITE;
+
+        // UpOrDownCLean.Name = "Up or down clean";
+        // EnterSignal.Name = "Enter signal";
         return;
     }
+    if (sc.Index == 0) {
+        //sc.ValueFormat = sc.BaseGraphValueFormat;
+
+        s_NumericInformationGraphDrawTypeConfig NumericInformationGraphDrawTypeConfig;
+        NumericInformationGraphDrawTypeConfig.TransparentTextBackground = false;
+        NumericInformationGraphDrawTypeConfig.ShowPullback = true;
+
+        NumericInformationGraphDrawTypeConfig.GridlineStyleSubgraphIndex = 0;  // Subgraph 1 to specify grid line style
+        NumericInformationGraphDrawTypeConfig.ValueFormat[1] = 0;  // set value format for volume, others are inherited
+        NumericInformationGraphDrawTypeConfig.ValueFormat[2] = 0;  // set value format for volume, others are inherited
+        NumericInformationGraphDrawTypeConfig.ValueFormat[3] = 0;  // set value format for volume, others are inherited
+        NumericInformationGraphDrawTypeConfig.ValueFormat[4] = 0;  // set value format for volume, others are inherited
+
+        NumericInformationGraphDrawTypeConfig.ValueFormat[5] = 24;  // set value format for volume, others are inherited
+
+
+        sc.SetNumericInformationGraphDrawTypeConfig(NumericInformationGraphDrawTypeConfig);
+    }
+
+
     // Index
     const int i = sc.Index;
 
@@ -160,44 +207,53 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
 
     // Building the cumulative sum for difference indicators
     SCFloatArray AskVBidV;
+    SCFloatArray TotalV;
     SCFloatArray AskTBidT;
-    SCFloatArray UpDownTickVolDiff;
-    sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, AskVBidV);
-    sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, AskTBidT);
-    sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, UpDownTickVolDiff);
+    SCFloatArray UpDownT;
+    int retrieveSuccess = sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, AskVBidV);
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 12, TotalV);
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 23, AskTBidT);
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 49, UpDownT);
 
-
-    SCFloatArray StudyReference;
-    if (SCFloatArray StudyReference;
-        sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, StudyReference) > 0
-        && StudyReference.GetArraySize() > 0) {
+    if (retrieveSuccess == 4) {
 
         if (i == 0) {
             // If it's the first bar, the spot and the cumulative are the same
-            CumSum[i] = StudyReference[i];
+            CumSumAskVBidV[i] = AskVBidV[i];
+            CumSumTotalV[i] = TotalV[i];
+            CumSumAskTBidT[i] = AskTBidT[i];
+            CumSumUpDownT[i] = UpDownT[i];
+
         } else {
             // Otherwise we implement the cumulative logic
             if (const float priceOfInterest = isDown ? priceOfInterestLow : priceOfInterestHigh; IsCleanTick(priceOfInterest, sc)) {
-                CumSum[i] = StudyReference[i];
+                CumSumAskVBidV[i] = AskVBidV[i];
+                CumSumTotalV[i] = TotalV[i];
+                CumSumAskTBidT[i] = AskTBidT[i];
+                CumSumUpDownT[i] = UpDownT[i];
             } else {
-                CumSum[i] = StudyReference[i] + CumSum[i - 1];
+                CumSumAskVBidV[i] = AskVBidV[i] + CumSumAskVBidV[i-1];
+                CumSumTotalV[i] = TotalV[i] + CumSumTotalV[i-1];
+                CumSumAskTBidT[i] = AskTBidT[i]+ CumSumAskTBidT[i-1];
+                CumSumUpDownT[i] = UpDownT[i] + CumSumUpDownT[i-1];
             }
         }
+        FracSignedImbalance[i] = CumSumAskVBidV[i] / TotalV[i];
     }
 
     // Building the Up / Down clean flag
-    const int isCleanOrder = isDown ? static_cast<int>(IsCleanTick(priceOfInterestOrderLow, sc)): static_cast<int>(IsCleanTick(priceOfInterestOrderHigh, sc));
-    UpOrDownCLean[i] = isCleanOrder;
-
-    // Building the order entry flag
-    int orderEntryFlag = 0;
-    if (isDown && isCleanOrder == 1 && CumSum[i-1] >= CumulativeThresholdSell.GetFloat()) {
-        orderEntryFlag = -1;
-    } else if (!isDown && isCleanOrder == 1 && CumSum[i-1] <= CumulativeThresholdBuy.GetFloat()) {
-        orderEntryFlag = 1;
-    }
-
-    EnterSignal[i] = orderEntryFlag;
+    //const int isCleanOrder = isDown ? static_cast<int>(IsCleanTick(priceOfInterestOrderLow, sc)): static_cast<int>(IsCleanTick(priceOfInterestOrderHigh, sc));
+    //UpOrDownCLean[i] = isCleanOrder;
+//
+    //// Building the order entry flag
+    //int orderEntryFlag = 0;
+    //if (isDown && isCleanOrder == 1 && CumSumAskVBidV[i-1] >= CumulativeThresholdSell.GetFloat()) {
+    //    orderEntryFlag = -1;
+    //} else if (!isDown && isCleanOrder == 1 && CumSumAskVBidV[i-1] <= CumulativeThresholdBuy.GetFloat()) {
+    //    orderEntryFlag = 1;
+    //}
+//
+    //EnterSignal[i] = orderEntryFlag;
 }
 
 
