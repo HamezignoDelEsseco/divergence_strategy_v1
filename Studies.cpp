@@ -293,6 +293,92 @@ SCSFExport scsf_StrategyBasicFlagTable(SCStudyInterfaceRef sc) {
     EnterSignal[i] = orderEntryFlag;
 }
 
+SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
+
+    SCInputRef InputStudy = sc.Input[0];
+    SCInputRef CleanTicksForCumCum = sc.Input[1];
+    SCInputRef CleanTicksForOrderSignal = sc.Input[2];
+    SCInputRef CumulativeThresholdBuy = sc.Input[3];
+    SCInputRef CumulativeThresholdSell = sc.Input[4];
+    SCInputRef UseAskVBidV = sc.Input[5];
+    SCInputRef VolumeEMEAWindow = sc.Input[6];
+
+    SCSubgraphRef EnterSignal = sc.Subgraph[0];
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+
+        sc.GraphName = "Strategy basic flag";
+
+        // The Study
+        InputStudy.Name = "Study to sum";
+        InputStudy.SetStudyID(1);
+
+        CleanTicksForCumCum.Name = "Clean ticks for cumulative sum";
+        CleanTicksForCumCum.SetIntLimits(1, 4);
+        CleanTicksForCumCum.SetInt(3);
+
+        CleanTicksForOrderSignal.Name = "Clean ticks for order signal";
+        CleanTicksForOrderSignal.SetIntLimits(1, 4);
+        CleanTicksForOrderSignal.SetInt(2);
+
+        CumulativeThresholdBuy.Name = "BUY max study amount";
+        CumulativeThresholdBuy.SetIntLimits(-5000, -1);
+        CumulativeThresholdBuy.SetInt(-200);
+
+        CumulativeThresholdSell.Name = "SELL min study amount";
+        CumulativeThresholdSell.SetIntLimits(1, 5000);
+        CumulativeThresholdSell.SetInt(200);
+
+        VolumeEMEAWindow.Name = "Volume EMEA Window";
+        VolumeEMEAWindow.SetIntLimits(1, 200);
+        VolumeEMEAWindow.SetInt(20);
+
+        UseAskVBidV.Name = "Use AskV - BidV";
+        UseAskVBidV.SetYesNo(0);
+
+        EnterSignal.Name = "Enter signal";
+        return;
+    }
+
+    // Index
+    const int i = sc.Index;
+
+    // Getting the direction of the current bar
+    const float O = sc.Open[i];
+    const float prevHigh = sc.High[i - 1];
+    const float prevLow = sc.Low[i - 1];
+    const bool isDown = (O <= prevLow);
+
+    const float priceOfInterestHigh = prevHigh + sc.TickSize * CleanTicksForCumCum.GetFloat();
+    const float priceOfInterestLow = prevLow - sc.TickSize * CleanTicksForCumCum.GetFloat();
+    const float priceOfInterestOrderHigh = prevHigh + sc.TickSize * CleanTicksForOrderSignal.GetFloat();
+    const float priceOfInterestOrderLow = prevLow - sc.TickSize * CleanTicksForOrderSignal.GetFloat();
+
+    SCFloatArray MinAskVBidV;
+    SCFloatArray MaxAskVBidV;
+
+    int retrieveSuccess = sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, EnterSignal.Arrays[0]); // AskV - BidV
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 12, EnterSignal.Arrays[1]); // Total V
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 23, EnterSignal.Arrays[2]); // AskT - BidT
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 49, EnterSignal.Arrays[3]); // UpDownT
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 8, MinAskVBidV);
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 7, MaxAskVBidV);
+
+    if (retrieveSuccess == 6) {
+            if (const float priceOfInterest = isDown ? priceOfInterestLow : priceOfInterestHigh; !IsCleanTick(priceOfInterest, sc)) {
+                EnterSignal.Arrays[0][i] += EnterSignal.Arrays[0][i-1];
+                EnterSignal.Arrays[1][i] += EnterSignal.Arrays[1][i-1];
+                EnterSignal.Arrays[2][i] += EnterSignal.Arrays[2][i-1];
+                EnterSignal.Arrays[3][i] += EnterSignal.Arrays[3][i-1];
+            }
+        EnterSignal.Arrays[4][i] = MaxAskVBidV[i] + MinAskVBidV[i];
+    }
+
+    EnterSignal[i] = EnterSignal.Arrays[4][i];
+
+}
+
 
 SCSFExport scsf_StrategyBasicPeakTypeVolumeExec(SCStudyInterfaceRef sc) {
     /*
