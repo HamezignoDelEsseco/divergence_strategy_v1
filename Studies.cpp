@@ -263,7 +263,7 @@ SCSFExport scsf_StrategyBasicFlagTable(SCStudyInterfaceRef sc) {
                 CumSumUpDownT[i] = UpDownT[i];
             } else {
                 CumSumAskVBidV[i] = AskVBidV[i] + CumSumAskVBidV[i-1];
-                CumSumTotalV[i] = TotalV[i] + CumSumTotalV[i-1];
+                CumSumTotalV[i] = TotalV[i]; // Not cum summing this one for EMEA consistency
                 CumSumAskTBidT[i] = AskTBidT[i]+ CumSumAskTBidT[i-1];
                 CumSumUpDownT[i] = UpDownT[i] + CumSumUpDownT[i-1];
             }
@@ -271,7 +271,7 @@ SCSFExport scsf_StrategyBasicFlagTable(SCStudyInterfaceRef sc) {
         CumMaxAskVBidV[i] = MaxAskVBidV[i];
         CumMinAskVBidV[i] = MinAskVBidV[i];
         MinMaxDiff[i] = MaxAskVBidV[i] + MinAskVBidV[i];
-        FracSignedImbalance[i] = CumSumAskVBidV[i] / CumSumTotalV[i];
+        FracSignedImbalance[i] = CumSumAskVBidV[i] / TotalV[i];
         sc.ExponentialMovAvg(sc.Volume, VolEMEA, VolumeEMEAWindow.GetInt());
     }
 
@@ -301,7 +301,9 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
     SCInputRef CumulativeThresholdBuy = sc.Input[3];
     SCInputRef CumulativeThresholdSell = sc.Input[4];
     SCInputRef UseAskVBidV = sc.Input[5];
-    SCInputRef VolumeEMEAWindow = sc.Input[6];
+    SCInputRef UseAskVBidVAndUpDownT = sc.Input[6];
+
+    SCInputRef VolumeEMEAWindow = sc.Input[7];
 
     SCSubgraphRef EnterSignal = sc.Subgraph[0];
 
@@ -337,9 +339,14 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
         UseAskVBidV.Name = "Use AskV - BidV";
         UseAskVBidV.SetYesNo(0);
 
+        UseAskVBidVAndUpDownT.Name = "Use (AskV - BidV) or (UpT - DownT vol diff)";
+        UseAskVBidVAndUpDownT.SetYesNo(1);
+
         EnterSignal.Name = "Enter signal";
         return;
     }
+    // Result of the study (-1 or 1)
+    int orderEntryFlag = 0;
 
     // Index
     const int i = sc.Index;
@@ -359,24 +366,46 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
     SCFloatArray MaxAskVBidV;
 
     int retrieveSuccess = sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, EnterSignal.Arrays[0]); // AskV - BidV
-    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 12, EnterSignal.Arrays[1]); // Total V
+    // retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 12, EnterSignal.Arrays[1]); // Total V
     retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 23, EnterSignal.Arrays[2]); // AskT - BidT
     retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 49, EnterSignal.Arrays[3]); // UpDownT
-    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 8, MinAskVBidV);
-    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 7, MaxAskVBidV);
+    // retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 8, MinAskVBidV);
+    // retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 7, MaxAskVBidV);
 
-    if (retrieveSuccess == 6) {
+    if (retrieveSuccess == 3) {
             if (const float priceOfInterest = isDown ? priceOfInterestLow : priceOfInterestHigh; !IsCleanTick(priceOfInterest, sc)) {
                 EnterSignal.Arrays[0][i] += EnterSignal.Arrays[0][i-1];
-                EnterSignal.Arrays[1][i] += EnterSignal.Arrays[1][i-1];
+                // EnterSignal.Arrays[1][i] += EnterSignal.Arrays[1][i-1]; // We don't sum total Volume as this would falsify EMEA
                 EnterSignal.Arrays[2][i] += EnterSignal.Arrays[2][i-1];
                 EnterSignal.Arrays[3][i] += EnterSignal.Arrays[3][i-1];
             }
-        EnterSignal.Arrays[4][i] = MaxAskVBidV[i] + MinAskVBidV[i];
+        // EnterSignal.Arrays[4][i] = MaxAskVBidV[i] + MinAskVBidV[i];
     }
 
-    EnterSignal[i] = EnterSignal.Arrays[4][i];
+    sc.ExponentialMovAvg(sc.Volume, EnterSignal.Arrays[5], VolumeEMEAWindow.GetInt());
 
+    const int isCleanOrder = isDown ? static_cast<int>(IsCleanTick(priceOfInterestOrderLow, sc)): static_cast<int>(IsCleanTick(priceOfInterestOrderHigh, sc));
+    if (isDown && isCleanOrder) {
+        if (UseAskVBidVAndUpDownT.GetInt() == 1) {
+            orderEntryFlag = EnterSignal.Arrays[0][i-1] >= CumulativeThresholdSell.GetFloat() | EnterSignal.Arrays[3][i-1] >= CumulativeThresholdSell.GetFloat() ? -1: 0;
+        } else if (UseAskVBidV.GetInt() == 1 ) {
+            orderEntryFlag = EnterSignal.Arrays[0][i-1] >= CumulativeThresholdSell.GetFloat() ? -1: 0;
+        } else {
+            orderEntryFlag = EnterSignal.Arrays[3][i-1] >= CumulativeThresholdSell.GetFloat() ? -1: 0;
+        }
+    }
+
+    if (!isDown && isCleanOrder) {
+        if (UseAskVBidVAndUpDownT.GetInt() == 1) {
+            orderEntryFlag = EnterSignal.Arrays[0][i-1] <= CumulativeThresholdBuy.GetFloat() | EnterSignal.Arrays[3][i-1] <= CumulativeThresholdBuy.GetFloat() ? 1: 0;
+        } else if (UseAskVBidV.GetInt() == 1 ) {
+            orderEntryFlag = EnterSignal.Arrays[0][i-1] <= CumulativeThresholdBuy.GetFloat() ? 1: 0;
+        } else {
+            orderEntryFlag = EnterSignal.Arrays[3][i-1] <= CumulativeThresholdBuy.GetFloat() ? 1: 0;
+        }
+    }
+
+    EnterSignal[i] = static_cast<float>(orderEntryFlag);
 }
 
 
