@@ -306,6 +306,9 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
     SCInputRef VolumeEMEAWindow = sc.Input[7];
 
     SCSubgraphRef EnterSignal = sc.Subgraph[0];
+    SCSubgraphRef CumSumAskVBidV = sc.Subgraph[1];
+    SCSubgraphRef CumSumUpDownTVolDiff = sc.Subgraph[2];
+
 
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
@@ -343,6 +346,9 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
         UseAskVBidVAndUpDownT.SetYesNo(1);
 
         EnterSignal.Name = "Enter signal";
+        CumSumAskVBidV.Name = "CumSumAskVBidV";
+        CumSumUpDownTVolDiff.Name = "CumSumUpDownTVolDiff";
+
         return;
     }
     // Result of the study (-1 or 1)
@@ -367,22 +373,22 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
 
     int retrieveSuccess = sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 0, EnterSignal.Arrays[0]); // AskV - BidV
     // retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 12, EnterSignal.Arrays[1]); // Total V
-    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 23, EnterSignal.Arrays[2]); // AskT - BidT
-    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 49, EnterSignal.Arrays[3]); // UpDownT
+    // retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 23, EnterSignal.Arrays[2]); // AskT - BidT
+    retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 49, EnterSignal.Arrays[1]); // UpDownT
     // retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 8, MinAskVBidV);
     // retrieveSuccess += sc.GetStudyArrayUsingID(InputStudy.GetStudyID(), 7, MaxAskVBidV);
 
-    if (retrieveSuccess == 3) {
+    if (retrieveSuccess == 2) {
             if (const float priceOfInterest = isDown ? priceOfInterestLow : priceOfInterestHigh; !IsCleanTick(priceOfInterest, sc)) {
                 EnterSignal.Arrays[0][i] += EnterSignal.Arrays[0][i-1];
                 // EnterSignal.Arrays[1][i] += EnterSignal.Arrays[1][i-1]; // We don't sum total Volume as this would falsify EMEA
-                EnterSignal.Arrays[2][i] += EnterSignal.Arrays[2][i-1];
-                EnterSignal.Arrays[3][i] += EnterSignal.Arrays[3][i-1];
+                // EnterSignal.Arrays[2][i] += EnterSignal.Arrays[2][i-1];
+                EnterSignal.Arrays[1][i] += EnterSignal.Arrays[1][i-1];
             }
         // EnterSignal.Arrays[4][i] = MaxAskVBidV[i] + MinAskVBidV[i];
     }
 
-    sc.ExponentialMovAvg(sc.Volume, EnterSignal.Arrays[5], VolumeEMEAWindow.GetInt());
+    // sc.ExponentialMovAvg(sc.Volume, EnterSignal.Arrays[2], VolumeEMEAWindow.GetInt());
 
     const int isCleanOrder = isDown ? static_cast<int>(IsCleanTick(priceOfInterestOrderLow, sc)): static_cast<int>(IsCleanTick(priceOfInterestOrderHigh, sc));
     if (isDown && isCleanOrder) {
@@ -406,6 +412,9 @@ SCSFExport scsf_StrategyBasicFlag(SCStudyInterfaceRef sc) {
     }
 
     EnterSignal[i] = static_cast<float>(orderEntryFlag);
+    CumSumAskVBidV[i] = EnterSignal.Arrays[0][i];
+    CumSumUpDownTVolDiff[i] = EnterSignal.Arrays[1][i];
+
 }
 
 
