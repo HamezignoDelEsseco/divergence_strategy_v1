@@ -75,3 +75,20 @@ int BidAskDiffBelowLowestPeak(SCStudyInterfaceRef sc, const int StudyId) {
     }
 }
 
+long long totalVbP(SCStudyInterfaceRef sc, const int StudyID) {
+    // Total volume that exists within the latest volume profile
+    const int PricesCount = sc.GetNumPriceLevelsForStudyProfile(StudyID, 0);
+    long long res = 0;
+    for (int PriceIndex = 0; PriceIndex < PricesCount; PriceIndex++)
+    {
+
+        s_VolumeAtPriceV2 VolumeAtPrice;
+
+        int success = sc.GetVolumeAtPriceDataForStudyProfile(StudyID, 0, PriceIndex, VolumeAtPrice);
+        if (success > 0) {
+            res += VolumeAtPrice.Volume;
+
+        }
+    }
+    return res;
+}

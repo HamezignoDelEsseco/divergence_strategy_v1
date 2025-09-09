@@ -33,3 +33,5 @@ void colorAllSubGraphs(SCStudyInterfaceRef sc, const int i, Args&... args) {
         }(args), ...
     );
 }
+
+long long totalVbP(SCStudyInterfaceRef sc, int StudyID);
