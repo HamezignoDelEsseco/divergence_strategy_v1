@@ -35,3 +35,7 @@ void colorAllSubGraphs(SCStudyInterfaceRef sc, const int i, Args&... args) {
 }
 
 long long totalVbP(SCStudyInterfaceRef sc, int StudyID);
+
+bool lowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
+
+bool highestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);

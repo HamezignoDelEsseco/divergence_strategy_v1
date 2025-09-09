@@ -92,3 +92,21 @@ long long totalVbP(SCStudyInterfaceRef sc, const int StudyID) {
     }
     return res;
 }
+
+
+bool lowestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
+    int target = 0;
+    for (int i = 0; i < nBars; i++) {
+        target += sc.Low[index] <= sc.Low[index - i] ? 1 : 0;
+    }
+    return target == nBars;
+}
+
+
+bool highestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
+    int target = 0;
+    for (int i = 0; i < nBars; i++) {
+        target += sc.High[index] >= sc.High[index - i] ? 1 : 0;
+    }
+    return target == nBars;
+}

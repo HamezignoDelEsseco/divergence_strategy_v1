@@ -97,14 +97,14 @@ SCSFExport scsf_UpDownTickCost(SCStudyInterfaceRef sc) {
         TotalVolume[i-1] = 0;
     }
 
-    PriceStats& stats = GetPriceStats(*priceMap, sc.PriceValueToTicks(sc.Close[i]));
-    const int uptick = i == 0 ? 0: sc.Close[i] > sc.Close[i - 1] ? 1:0;
-    const int downtick = i == 0 ? 0 : sc.Close[i] < sc.Close[i - 1]? 1:0;
-    const int staystick = i == 0 ? 0: sc.Close[i] == sc.Close[i - 1]? 1:0;
-
-     // const int s = priceMap->size(); // Debugging
-
-    UpdatePriceStats(stats, sc.Volume[i], sc.AskVolume[i], sc.BidVolume[i], sc.NumberOfTrades[i], uptick, downtick, staystick);
+    // We look at the upticks and down ticks FROM the latest price, not TO the latest price !! (we always lag one trade)
+    if (i > 0 && !sc.IsNewTradingDay(i)) {
+        PriceStats& stats = GetPriceStats(*priceMap, sc.PriceValueToTicks(sc.Close[i-1]));
+        const int uptick = i == 1 ? 0: sc.Close[i] > sc.Close[i - 1] ? 1:0;
+        const int downtick = i == 1 ? 0 : sc.Close[i] < sc.Close[i - 1]? 1:0;
+        const int staystick = i == 1 ? 0: sc.Close[i] == sc.Close[i - 1]? 1:0;
+        UpdatePriceStats(stats, sc.Volume[i-1], sc.AskVolume[i-1], sc.BidVolume[i-1], sc.NumberOfTrades[i-1], uptick, downtick, staystick);
+    }
 
     TotalVolume[i] = TotalVolume[i-1] + sc.Volume[i];
 }
