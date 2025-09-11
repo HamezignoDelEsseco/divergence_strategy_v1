@@ -528,3 +528,110 @@ SCSFExport scsf_StrategyBasicPeakTypeVolumeExec(SCStudyInterfaceRef sc) {
         }
     }
 }
+
+
+SCSFExport scsf_StrategyBasicPeakExec(SCStudyInterfaceRef sc) {
+    /*
+     * This indicator is stating whether a trade should be CONSIDERED. It is NOT there
+     *
+     */
+    SCInputRef Signal = sc.Input[0];
+    SCInputRef RangeBarPredictors = sc.Input[1];
+    SCInputRef NBarsPeak = sc.Input[2];
+    SCInputRef AllowTradingAlways = sc.Input[3];
+
+    SCSubgraphRef TradeId = sc.Subgraph[0];
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+
+        sc.GraphName = "Divergence basic trading executor";
+
+        // The Study
+        Signal.Name = "Trading Signal";
+        Signal.SetStudyID(0);
+
+        RangeBarPredictors.Name = "Range bar predictors";
+        RangeBarPredictors.SetStudyID(1);
+
+        NBarsPeak.Name = "Lookback bars for peak";
+        NBarsPeak.SetIntLimits(1, 10);
+        NBarsPeak.SetInt(4);
+
+        AllowTradingAlways.Name = "Allow trading always";
+        AllowTradingAlways.SetYesNo(0);
+
+        TradeId.Name = "Trade ID";
+
+        RangeBarPredictors.Name = "Range bar predictor study";
+        RangeBarPredictors.SetStudyID(0);
+    }
+
+    // Common study specs
+    s_SCNewOrder NewOrder;
+    NewOrder.OrderQuantity = 1;
+    NewOrder.OrderType = SCT_ORDERTYPE_LIMIT;
+    NewOrder.TimeInForce = SCT_TIF_DAY;
+
+    // Retrieving ID
+    int64_t &InternalOrderID = sc.GetPersistentInt64(1);
+
+    // Trading allowed bool
+    bool TradingAllowed = AllowTradingAlways.GetInt() == 1 ? true : tradingAllowedCash(sc);
+
+
+    const int i = sc.Index;
+    double peakMin;
+    double peakMax;
+    highLowCleanPricesInBar(sc, peakMin, peakMax);
+
+    // Retrieving Studies
+    SCFloatArray SignalValue;
+    SCFloatArray ASkVBidV;
+    SCFloatArray UpDownTVolDiff;
+
+    SCFloatArray TopBarPredictor;
+    SCFloatArray LowBarPredictor;
+    sc.GetStudyArrayUsingID(Signal.GetStudyID(), 0, SignalValue);
+    sc.GetStudyArrayUsingID(Signal.GetStudyID(), 1, ASkVBidV);
+    sc.GetStudyArrayUsingID(Signal.GetStudyID(), 2, UpDownTVolDiff);
+
+    sc.GetStudyArrayUsingID(RangeBarPredictors.GetStudyID(), 0, TopBarPredictor);
+    sc.GetStudyArrayUsingID(RangeBarPredictors.GetStudyID(), 1, LowBarPredictor);
+    //
+    // sc.ExponentialMovAvg(sc.Volume, TradeId.Arrays[0], VolumeEMEAWindow.GetInt());
+
+
+    const bool buyCondition = SignalValue[i] == 1 && low(sc, NBarsPeak.GetInt(), i-1);
+    const bool sellCondition = SignalValue[i] == -1;
+    int orderSubmitted = 0;
+
+    if (buyCondition) {
+        NewOrder.Price1 = sc.LastTradePrice;
+        NewOrder.Target1Price = std::max<double>(NewOrder.Price1 + sc.TickSize * 3, TopBarPredictor[i]);
+        NewOrder.Stop1Offset = sc.TickSize * 3;
+
+        orderSubmitted = static_cast<int>(sc.BuyOrder(NewOrder));
+        if (orderSubmitted > 0) {
+            InternalOrderID = NewOrder.InternalOrderID;
+            sc.Subgraph[0][sc.Index] = static_cast<float>(InternalOrderID);
+            SCString Buffer;
+            Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
+            sc.AddMessageToLog(Buffer, 1);
+        }
+    }
+    else if (sellCondition) {
+        NewOrder.Price1 = sc.LastTradePrice;
+        NewOrder.Target1Price = std::min<double>(NewOrder.Price1 - sc.TickSize * 3, LowBarPredictor[i]);
+        NewOrder.Stop1Offset = sc.TickSize * 3;
+
+        orderSubmitted = static_cast<int>(sc.SellOrder(NewOrder));
+        if (orderSubmitted > 0) {
+            InternalOrderID = NewOrder.InternalOrderID;
+            sc.Subgraph[0][sc.Index] = static_cast<float>(InternalOrderID);
+            SCString Buffer;
+            Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
+            sc.AddMessageToLog(Buffer, 1);
+        }
+    }
+}

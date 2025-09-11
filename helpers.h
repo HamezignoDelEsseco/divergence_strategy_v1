@@ -33,3 +33,7 @@ void colorAllSubGraphs(SCStudyInterfaceRef sc, const int i, Args&... args) {
         }(args), ...
     );
 }
+
+bool lowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
+
+bool highestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
