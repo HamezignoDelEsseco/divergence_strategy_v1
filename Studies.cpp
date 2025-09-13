@@ -570,6 +570,7 @@ SCSFExport scsf_StrategyBasicPeakExec(SCStudyInterfaceRef sc) {
     // Common study specs
     s_SCNewOrder NewOrder;
     NewOrder.OrderQuantity = 1;
+    NewOrder.TextTag = "TEST";
     NewOrder.OrderType = SCT_ORDERTYPE_LIMIT;
     NewOrder.TimeInForce = SCT_TIF_DAY;
 
@@ -598,18 +599,24 @@ SCSFExport scsf_StrategyBasicPeakExec(SCStudyInterfaceRef sc) {
 
     sc.GetStudyArrayUsingID(RangeBarPredictors.GetStudyID(), 0, TopBarPredictor);
     sc.GetStudyArrayUsingID(RangeBarPredictors.GetStudyID(), 1, LowBarPredictor);
-    //
-    // sc.ExponentialMovAvg(sc.Volume, TradeId.Arrays[0], VolumeEMEAWindow.GetInt());
 
 
-    const bool buyCondition = SignalValue[i] == 1 && low(sc, NBarsPeak.GetInt(), i-1);
-    const bool sellCondition = SignalValue[i] == -1;
+    const bool buyCondition = (
+            SignalValue[i] == 1
+            && lowestOfNBars(sc, NBarsPeak.GetInt(), i-1)
+            && TradingAllowed
+        );
+    const bool sellCondition = (
+            SignalValue[i] == -1
+            && highestOfNBars(sc, NBarsPeak.GetInt(), i-1)
+            && TradingAllowed
+        );
     int orderSubmitted = 0;
 
     if (buyCondition) {
-        NewOrder.Price1 = sc.LastTradePrice;
-        NewOrder.Target1Price = std::max<double>(NewOrder.Price1 + sc.TickSize * 3, TopBarPredictor[i]);
-        NewOrder.Stop1Offset = sc.TickSize * 3;
+        NewOrder.Price1 = sc.High[i-1] - sc.TickSize;
+        NewOrder.Target1Price = TopBarPredictor[i] - sc.TickSize;
+        NewOrder.Stop1Price = LowBarPredictor[i];
 
         orderSubmitted = static_cast<int>(sc.BuyOrder(NewOrder));
         if (orderSubmitted > 0) {
@@ -621,9 +628,9 @@ SCSFExport scsf_StrategyBasicPeakExec(SCStudyInterfaceRef sc) {
         }
     }
     else if (sellCondition) {
-        NewOrder.Price1 = sc.LastTradePrice;
-        NewOrder.Target1Price = std::min<double>(NewOrder.Price1 - sc.TickSize * 3, LowBarPredictor[i]);
-        NewOrder.Stop1Offset = sc.TickSize * 3;
+        NewOrder.Price1 = sc.Low[i-1] + sc.TickSize;
+        NewOrder.Target1Price = LowBarPredictor[i] + sc.TickSize;
+        NewOrder.Stop1Price = TopBarPredictor[i];
 
         orderSubmitted = static_cast<int>(sc.SellOrder(NewOrder));
         if (orderSubmitted > 0) {
@@ -632,6 +639,29 @@ SCSFExport scsf_StrategyBasicPeakExec(SCStudyInterfaceRef sc) {
             SCString Buffer;
             Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
             sc.AddMessageToLog(Buffer, 1);
+        }
+    }
+    SCString Buffer;
+    if (s_SCTradeOrder LiveOrder; sc.GetOrderByOrderID(sc.GetPersistentInt64(1), LiveOrder) == 1) {
+
+        if (LiveOrder.OrderStatusCode == SCT_OSC_FILLED) {
+            s_SCNewOrder ModifyOrder;
+            ModifyOrder.InternalOrderID = LiveOrder.InternalOrderID;
+            if (LiveOrder.BuySell == BSE_SELL) {
+                ModifyOrder.Target1Price = LowBarPredictor[i] + sc.TickSize;
+                ModifyOrder.Stop1Price = TopBarPredictor[i];
+                sc.ModifyOrder(ModifyOrder);
+                sc.AddMessageToLog(Buffer.Format("SELL modif=> Target: %p Stop %p", ModifyOrder.Target1Price, ModifyOrder.Stop1Price), 1);
+            } else if (LiveOrder.BuySell == BSE_BUY) {
+                ModifyOrder.Target1Price = TopBarPredictor[i] - sc.TickSize;
+                ModifyOrder.Stop1Price = LowBarPredictor[i];
+                sc.ModifyOrder(ModifyOrder);
+                sc.AddMessageToLog(Buffer.Format("BUY modif=> Target: %p Stop %p", ModifyOrder.Target1Price, ModifyOrder.Stop1Price), 1);
+            }
+
+
+            sc.ModifyOrder(ModifyOrder);
+            Buffer.Format("Modigied", InternalOrderID);
         }
     }
 }
