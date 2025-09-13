@@ -13,7 +13,7 @@
 #include "helpers.h"
 #include "sierrachart.h"
 
-SCDLLName("TRADE DIVERGENCE MODE 1")
+SCDLLName("MACD TRADING")
 
 SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
     /*
@@ -527,4 +527,110 @@ SCSFExport scsf_StrategyBasicPeakTypeVolumeExec(SCStudyInterfaceRef sc) {
             sc.AddMessageToLog(Buffer, 1);
         }
     }
+}
+
+SCSFExport scsf_StrategyMACDShort(SCStudyInterfaceRef sc) {
+    /*
+     * This indicator is stating whether a trade should be CONSIDERED. It is NOT there
+     *
+     */
+    SCInputRef PriceEMWAStudy = sc.Input[0];
+    SCInputRef ADXStudy = sc.Input[1];
+    SCInputRef MACDXStudy = sc.Input[2];
+
+    SCInputRef RangeTrendADXThresh = sc.Input[3];
+    SCInputRef PriceEMWAMinOffset = sc.Input[4];
+    SCInputRef AllowTradingAlways = sc.Input[5];
+
+
+    SCSubgraphRef TradeId = sc.Subgraph[0];
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+
+        sc.GraphName = "Trading MACD Short Exec";
+
+        // The Study
+        PriceEMWAStudy.Name = "PriceEMWA";
+        PriceEMWAStudy.SetStudyID(0);
+
+        ADXStudy.Name = "ADX";
+        ADXStudy.SetStudyID(0);
+
+        MACDXStudy.Name = "MACD CrossOver";
+        MACDXStudy.SetStudyID(0);
+
+        RangeTrendADXThresh.Name = "Range/trend ADX threshold";
+        RangeTrendADXThresh.SetIntLimits(0, 50);
+        RangeTrendADXThresh.SetInt(25);
+
+        PriceEMWAMinOffset.Name = "Price EMWA Tick Offset";
+        PriceEMWAMinOffset.SetIntLimits(0, 20);
+        PriceEMWAMinOffset.SetInt(5);
+
+        AllowTradingAlways.Name = "Allow trading always";
+        AllowTradingAlways.SetYesNo(0);
+
+        TradeId.Name = "Trade ID";
+    }
+
+    // Common study specs
+    s_SCNewOrder NewOrder;
+    NewOrder.OrderQuantity = 1;
+    NewOrder.OrderType = SCT_ORDERTYPE_MARKET;
+    NewOrder.TimeInForce = SCT_TIF_DAY;
+
+    // Retrieving ID
+    int64_t &InternalOrderID = sc.GetPersistentInt64(1);
+    int &BlockedTrading = sc.GetPersistentInt(2);
+    int &IndexExit = sc.GetPersistentInt(3);
+
+
+
+    // Trading allowed bool
+    bool TradingAllowed = AllowTradingAlways.GetInt() == 1 ? true : tradingAllowedCash(sc);
+
+    const int i = sc.Index;
+
+    // Retrieving Studies
+    SCFloatArray PriceEMWA;
+    SCFloatArray MACD;
+    SCFloatArray MACDMA;
+    SCFloatArray ADX;
+
+    sc.GetStudyArrayUsingID(PriceEMWAStudy.GetStudyID(), 0, PriceEMWA);
+    sc.GetStudyArrayUsingID(MACDXStudy.GetStudyID(), 0, MACD);
+    sc.GetStudyArrayUsingID(MACDXStudy.GetStudyID(), 1, MACDMA);
+
+    sc.GetStudyArrayUsingID(ADXStudy.GetStudyID(), 0, ADX);
+
+    if (ADX[i] < RangeTrendADXThresh.GetFloat() && ADX[i-1] >= RangeTrendADXThresh.GetFloat() && ADX[i] != 0) {
+        IndexExit = 0;
+        BlockedTrading = 0;
+    }
+
+    const bool sellCondition = sc.Close[i] <= (PriceEMWA[i] - PriceEMWAMinOffset.GetFloat() * sc.TickSize)
+            && TradingAllowed
+            && MACD[i] <= 0 && MACD[i] <= MACDMA[i]
+            && ADX[i-1] >= RangeTrendADXThresh.GetFloat() && ADX[i] >= RangeTrendADXThresh.GetFloat()
+            && BlockedTrading == 0;
+
+    int orderSubmitted = 0;
+
+    if (sellCondition) {
+        NewOrder.Target1Offset = 20 * sc.TickSize;
+        NewOrder.Stop1Offset = 10 * sc.TickSize ;
+
+        BlockedTrading = 1;
+        orderSubmitted = static_cast<int>(sc.SellOrder(NewOrder));
+        if (orderSubmitted > 0) {
+            InternalOrderID = NewOrder.InternalOrderID;
+            sc.Subgraph[0][sc.Index] = static_cast<float>(InternalOrderID);
+            SCString Buffer;
+            Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
+            sc.AddMessageToLog(Buffer, 1);
+        }
+    }
+
+
 }
