@@ -1,44 +1,73 @@
 #include "TradeManager.h"
-#include <algorithm>
 
-// ---------------- Trade ----------------
-Trade::Trade(int64_t parentId,
-             TradeDirection dir,
-             double entry,
-             double atr,
-             double stopAtrMult,
-             double targetAtrMult,
-             TargetMode mode)
+
+Trade::Trade(const int64_t parentId,
+          const BuySellEnum dir,
+          const double entryPrice,
+          const double atr,
+          const double stopAtrMult,
+          const double targetAtrMult,
+          const TargetMode mode)
     : parentOrderId(parentId),
-      direction(dir),
-      entryPrice(entry),
-      maxFavorablePrice(entry),
-      stopAtrMultiplier(stopAtrMult),
-      targetAtrMultiplier(targetAtrMult),
-      targetMode(mode),
-      active(true)
+    direction(dir),
+    entryPrice(entryPrice),
+    maxFavorablePrice(entryPrice),
+    stopAtrMultiplier(stopAtrMult),
+    targetAtrMultiplier(targetAtrMult),
+    targetMode(mode),
+    stopPrice(0),
+    active(true)
 {
     recalcStop(atr);
 
     if (targetMode == TargetMode::Flat) {
-        if (direction == TradeDirection::Long)
+        if (direction == BSE_BUY)
             targetPrice = entryPrice + targetAtrMultiplier * atr;
         else
             targetPrice = entryPrice - targetAtrMultiplier * atr;
     } else {
         // evolving mode starts at 3x ATR
-        if (direction == TradeDirection::Long)
+        if (direction == BSE_BUY)
             targetPrice = entryPrice + 3.0 * atr;
         else
             targetPrice = entryPrice - 3.0 * atr;
     }
 }
 
-void Trade::update(double currentPrice, double atr)
+Trade::Trade(const s_SCNewOrder &newOrder, const double atr, const double stopAtrMult, const double targetAtrMult, const BuySellEnum dir, const TargetMode mode):
+    parentOrderId(newOrder.InternalOrderID),
+    direction(dir),
+    entryPrice(newOrder.Price1),
+    maxFavorablePrice(newOrder.Price1),
+    stopAtrMultiplier(stopAtrMult),
+    targetAtrMultiplier(targetAtrMult),
+    targetMode(mode),
+    stopPrice(0),
+    active(true) {
+
+    recalcStop(atr);
+
+    if (targetMode == TargetMode::Flat) {
+        if (direction == BSE_BUY)
+            targetPrice = entryPrice + targetAtrMultiplier * atr;
+        else
+            targetPrice = entryPrice - targetAtrMultiplier * atr;
+    } else {
+        // evolving mode starts at 3x ATR
+        if (direction == BSE_BUY)
+            targetPrice = entryPrice + 3.0 * atr;
+        else
+            targetPrice = entryPrice - 3.0 * atr;
+    }
+}
+
+
+
+void Trade::update(const double currentPrice, const double atr)
 {
     if (!active) return;
 
-    if (direction == TradeDirection::Long)
+    if (direction == BSE_BUY)
         maxFavorablePrice = std::max(maxFavorablePrice, currentPrice);
     else
         maxFavorablePrice = std::min(maxFavorablePrice, currentPrice);
@@ -47,26 +76,26 @@ void Trade::update(double currentPrice, double atr)
     recalcTarget(atr, currentPrice);
 }
 
-void Trade::recalcStop(double atr)
+void Trade::recalcStop(const double atr)
 {
-    if (direction == TradeDirection::Long)
+    if (direction == BSE_BUY)
         stopPrice = maxFavorablePrice - stopAtrMultiplier * atr;
     else
         stopPrice = maxFavorablePrice + stopAtrMultiplier * atr;
 }
 
-void Trade::recalcTarget(double atr, double currentPrice)
+void Trade::recalcTarget(const double atr, const double currentPrice)
 {
     if (targetMode == TargetMode::Flat) return;
 
-    double distance = (direction == TradeDirection::Long)
+    double distance = (direction == BSE_BUY)
                       ? currentPrice - entryPrice
                       : entryPrice - currentPrice;
 
     int plateau = static_cast<int>(distance / (2.0 * atr));
 
     if (plateau > 0) {
-        if (direction == TradeDirection::Long)
+        if (direction == BSE_BUY)
             targetPrice = entryPrice + (3.0 + plateau) * atr;
         else
             targetPrice = entryPrice - (3.0 + plateau) * atr;
@@ -81,20 +110,42 @@ void Trade::close() { active = false; }
 
 // ---------------- TradeManager ----------------
 void TradeManager::addTrade(int64_t parentId,
-                            TradeDirection dir,
+                            BuySellEnum dir,
                             double entryPrice,
                             double atr,
                             double stopAtrMult,
                             double targetAtrMult,
                             TargetMode mode)
 {
+    if (tradeExists(parentId)) return; // prevent duplicates
     trades.emplace_back(parentId, dir, entryPrice, atr, stopAtrMult, targetAtrMult, mode);
 }
 
-void TradeManager::updateAll(double currentPrice, double atr)
+void TradeManager::addTrade(const Trade& trade)
+{
+    if (tradeExists(trade.getParentOrderId())) return; // prevent duplicates
+    trades.push_back(trade);
+}
+
+void TradeManager::addTrade(Trade&& trade)
+{
+    if (tradeExists(trade.getParentOrderId())) return; // prevent duplicates
+    //trades.emplace_back(std::move(trade));
+    trades.emplace_back(trade);
+}
+
+void TradeManager::updateAll(double currentPrice, double atr, SCStudyInterfaceRef sc)
 {
     for (auto& trade : trades)
         trade.update(currentPrice, atr);
+
+    // auto-cleanup: erase trades whose parent orders are gone
+    trades.erase(
+        std::remove_if(trades.begin(), trades.end(),
+                       [&](const Trade& t) {
+                           return !isOrderActiveInSierra(t.getParentOrderId(), sc);
+                       }),
+        trades.end());
 }
 
 void TradeManager::syncWithSierra(SCStudyInterfaceRef sc)
@@ -102,10 +153,27 @@ void TradeManager::syncWithSierra(SCStudyInterfaceRef sc)
     for (auto& trade : trades)
     {
         if (!trade.isActive()) continue;
-
         modifyAttachedStop(trade.getParentOrderId(), trade.getStopPrice(), sc);
         modifyAttachedTarget(trade.getParentOrderId(), trade.getTargetPrice(), sc);
     }
+}
+
+bool TradeManager::tradeExists(int64_t parentId) const
+{
+    for (const auto& t : trades)
+        if (t.getParentOrderId() == parentId)
+            return true;
+    return false;
+}
+
+bool TradeManager::isOrderActiveInSierra(int64_t parentId, SCStudyInterfaceRef sc) const
+{
+    s_SCTradeOrder order;
+    if (sc.GetOrderByOrderID(parentId, order) != 1)
+        return false; // no such order
+
+    // Only keep if still open
+    return order.OrderStatusCode == SCT_OSC_OPEN;
 }
 
 void TradeManager::modifyAttachedStop(int64_t parentKey, double newStop, SCStudyInterfaceRef sc)
@@ -137,15 +205,3 @@ void TradeManager::modifyAttachedTarget(int64_t parentKey, double newTarget, SCS
         }
     }
 }
-
-Trade* TradeManager::getTradeById(int64_t parentId)
-{
-    for (auto& trade : trades)
-    {
-        if (trade.getParentOrderId() == parentId)
-            return &trade;
-    }
-    return nullptr;
-}
-
-std::vector<Trade>& TradeManager::getAllTrades() { return trades; }

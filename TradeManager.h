@@ -5,18 +5,19 @@
 #include <cstdint>
 #include "sierrachart.h"  // Required for SCStudyInterfaceRef etc.
 
-enum class TradeDirection { Long, Short };
 enum class TargetMode { Flat, Evolving };
 
 class Trade {
 public:
     Trade(int64_t parentId,
-          TradeDirection dir,
+          BuySellEnum dir,
           double entryPrice,
           double atr,
           double stopAtrMult,
           double targetAtrMult,
           TargetMode mode);
+
+    Trade(const s_SCNewOrder &newOrder, double atr, double stopAtrMult, double targetAtrMult, BuySellEnum dir, TargetMode mode);
 
     void update(double currentPrice, double atr);
 
@@ -28,7 +29,7 @@ public:
 
 private:
     int64_t parentOrderId;
-    TradeDirection direction;
+    BuySellEnum direction;
     double entryPrice;
     double maxFavorablePrice;
     double stopAtrMultiplier;
@@ -45,15 +46,18 @@ private:
 class TradeManager {
 public:
     void addTrade(int64_t parentId,
-                  TradeDirection dir,
+                  BuySellEnum dir,
                   double entryPrice,
                   double atr,
                   double stopAtrMult,
                   double targetAtrMult,
                   TargetMode mode);
 
-    void updateAll(double currentPrice, double atr);
-    void syncWithSierra(SCStudyInterfaceRef sc);  // apply stops/targets to SC
+    void addTrade(const Trade& trade);
+    void addTrade(Trade&& trade);
+
+    void updateAll(double currentPrice, double atr, SCStudyInterfaceRef sc);
+    void syncWithSierra(SCStudyInterfaceRef sc);
 
     Trade* getTradeById(int64_t parentId);
     std::vector<Trade>& getAllTrades();
@@ -63,6 +67,9 @@ private:
 
     void modifyAttachedStop(int64_t parentKey, double newStop, SCStudyInterfaceRef sc);
     void modifyAttachedTarget(int64_t parentKey, double newTarget, SCStudyInterfaceRef sc);
+
+    bool tradeExists(int64_t parentId) const;
+    bool isOrderActiveInSierra(int64_t parentId, SCStudyInterfaceRef sc) const;
 };
 
 #endif // TRADE_MANAGER_H

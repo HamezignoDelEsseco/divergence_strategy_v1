@@ -12,8 +12,12 @@
 
 #include "helpers.h"
 #include "sierrachart.h"
+#include "TradeWrapper.h"
 
 SCDLLName("MACD TRADING")
+
+static std::unique_ptr<TradeWrapper> g_trade;
+
 
 SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
     /*
@@ -586,8 +590,8 @@ SCSFExport scsf_StrategyMACDShort(SCStudyInterfaceRef sc) {
         ATRStudy.SetStudyID(2);
 
         MaxMACDDiff.Name = "Max MACDDiff";
-        MaxMACDDiff.SetFloatLimits(-1., -0.01);
-        MaxMACDDiff.SetFloat(-0.15);
+        MaxMACDDiff.SetFloatLimits(-1., 0.0);
+        MaxMACDDiff.SetFloat(-0.2);
 
         PriceEMWAMinOffset.Name = "Price EMWA Tick Offset";
         PriceEMWAMinOffset.SetIntLimits(0, 20);
@@ -617,11 +621,21 @@ SCSFExport scsf_StrategyMACDShort(SCStudyInterfaceRef sc) {
         TradeId.Name = "Trade ID";
         CumMaxOpenPnL.Name = "Cumulative maximum open PnL";
         CurrentOpenPnL.Name = "Current open PnL";
+
         posAveragePrice.Name = "Pos Avg Price";
+        posAveragePrice.DrawStyle = DRAWSTYLE_IGNORE;
+
         posLowPrice.Name = "Pos Low Price";
+        posLowPrice.DrawStyle = DRAWSTYLE_IGNORE;
+
         posHighPrice.Name = "Pos High Price";
+        posHighPrice.DrawStyle = DRAWSTYLE_IGNORE;
+
         lastTradeIndex.Name = "Last trade index";
+        lastTradeIndex.DrawStyle = DRAWSTYLE_LINE;
+
         lastXOverIndex.Name = "Last cross over index";
+        lastXOverIndex.DrawStyle = DRAWSTYLE_LINE;
 
         // sc.MaximumPositionAllowed = 1;
 
@@ -665,7 +679,7 @@ SCSFExport scsf_StrategyMACDShort(SCStudyInterfaceRef sc) {
         LastCrossOverSellIndex = i;
     }
 
-    const bool EWACond = sc.Close[i] < PriceEMWA[i];
+    const bool EWACond = sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex];
     const bool sellCondition = EWACond
             && TradingAllowed
             && LastSellTradeIndex < LastCrossOverSellIndex
@@ -678,8 +692,8 @@ SCSFExport scsf_StrategyMACDShort(SCStudyInterfaceRef sc) {
 
     if (sellCondition && PositionData.PositionQuantity == 0) {
         int orderSubmitted = 0;
-        NewOrder.Target1Offset = 2 * ATR[i] / sc.TickSize;
-        NewOrder.Stop1Offset = 2 * ATR[i] / sc.TickSize;
+        NewOrder.Target1Offset = 2 * ATR[i];
+        NewOrder.Stop1Offset = 2 * ATR[i];
         // NewOrder.Stop1Price = sc.High[LastCrossOverSellIndex] + sc.TickSize * 3;
 
         orderSubmitted = static_cast<int>(sc.SellOrder(NewOrder));
@@ -739,4 +753,205 @@ SCSFExport scsf_StrategyMACDShort(SCStudyInterfaceRef sc) {
     TradeId[i] = static_cast<float>(InternalOrderID);
 
     flattenAllAfterCash(sc);
+}
+
+SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
+    /*
+     Shorting Red MACD when:
+    - The last xover is RED AND MACD goes negative
+    - OR there is green xover and red xover in next bar
+    - Trading either up to N Target ticks OR to green MACD
+    - Can choose whether to only short when the price is below the EWA in the chart
+    - Make sure the MACD is negative enough for the strategy. Having a MACD bouncing around 0 is a recipe for failure
+    - The number of ticks that we take should be a function of the MACD value: if VERY negative then we can aim for higher ticks (long)
+    - If very positive: we can aim for more ticks (Short)
+    - Exit rules: make sure that if at some point in the trade the max P&L has down-ticked by 10, get out to at least get some snacks
+    */
+    SCInputRef PriceEMWAStudy = sc.Input[0];
+    SCInputRef MACDXStudy = sc.Input[1];
+    SCInputRef ATRStudy = sc.Input[2];
+
+    // SCInputRef ADXStudy = sc.Input[1];
+
+    // SCInputRef RangeTrendADXThresh = sc.Input[3];
+    SCInputRef MaxMACDDiff = sc.Input[3];
+    SCInputRef PriceEMWAMinOffset = sc.Input[4];
+    SCInputRef UseRangeOnly = sc.Input[5];
+    SCInputRef OneTradePerPeriod = sc.Input[6]; // One the trade ended in the "red period", don't perform any other trade in this period
+    SCInputRef UseEWAThresh = sc.Input[7];
+    SCInputRef GiveBackTicks = sc.Input[8];
+    SCInputRef MaxTicksEntryFromCrossOVer = sc.Input[9];
+    SCInputRef AllowTradingAlways = sc.Input[10];
+
+    SCSubgraphRef TradeId = sc.Subgraph[0];
+    SCSubgraphRef CumMaxOpenPnL = sc.Subgraph[1];
+    SCSubgraphRef CurrentOpenPnL = sc.Subgraph[2];
+    SCSubgraphRef lastTradeIndex = sc.Subgraph[3];
+    SCSubgraphRef lastXOverIndex = sc.Subgraph[4];
+    SCSubgraphRef tradeFilledPrice = sc.Subgraph[5];
+
+
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+        sc.GraphName = "Trading MACD Short Exec - MANAGER";
+
+        // The Study
+        PriceEMWAStudy.Name = "PriceEMWA";
+        PriceEMWAStudy.SetStudyID(6);
+
+        //ADXStudy.Name = "ADX";
+        //ADXStudy.SetStudyID(0);
+
+        MACDXStudy.Name = "MACD CrossOver";
+        MACDXStudy.SetStudyID(7);
+
+        ATRStudy.Name = "ATR";
+        ATRStudy.SetStudyID(2);
+
+        MaxMACDDiff.Name = "Max MACDDiff";
+        MaxMACDDiff.SetFloatLimits(-1., 0.0);
+        MaxMACDDiff.SetFloat(-0.2);
+
+        PriceEMWAMinOffset.Name = "Price EMWA Tick Offset";
+        PriceEMWAMinOffset.SetIntLimits(0, 20);
+        PriceEMWAMinOffset.SetInt(5);
+
+        MaxTicksEntryFromCrossOVer.Name = "Maximum number of ticks entry after cross over";
+        MaxTicksEntryFromCrossOVer.SetIntLimits(1, 20);
+        MaxTicksEntryFromCrossOVer.SetInt(30);
+
+
+        UseRangeOnly.Name = "Trade in range only";
+        UseRangeOnly.SetYesNo(0);
+
+        UseEWAThresh.Name = "Trade above/below EWA only";
+        UseEWAThresh.SetYesNo(0);
+
+        OneTradePerPeriod.Name = "Trade above/below EWA only";
+        OneTradePerPeriod.SetYesNo(0);
+
+        GiveBackTicks.Name = "Give back in ticks";
+        GiveBackTicks.SetIntLimits(0, 20);
+        GiveBackTicks.SetInt(10);
+
+        AllowTradingAlways.Name = "Allow trading always";
+        AllowTradingAlways.SetYesNo(0);
+
+        TradeId.Name = "Trade ID";
+        TradeId.DrawStyle = DRAWSTYLE_IGNORE;
+
+
+        CumMaxOpenPnL.Name = "Cumulative maximum open PnL";
+        CumMaxOpenPnL.DrawStyle = DRAWSTYLE_IGNORE;
+
+        CurrentOpenPnL.Name = "Current open PnL";
+        CurrentOpenPnL.DrawStyle = DRAWSTYLE_IGNORE;
+
+        lastTradeIndex.Name = "Last trade index";
+        lastTradeIndex.DrawStyle = DRAWSTYLE_IGNORE;
+
+        lastXOverIndex.Name = "Last cross over index";
+        lastXOverIndex.DrawStyle = DRAWSTYLE_IGNORE;
+
+        tradeFilledPrice.Name = "Trade filled price";
+        tradeFilledPrice.DrawStyle = DRAWSTYLE_LINE;
+
+    }
+    const int i = sc.Index;
+
+    auto trade = reinterpret_cast<TradeWrapper*>(sc.GetPersistentPointer(1));
+    if (sc.IsFullRecalculation) {
+        trade = NULL;
+        sc.SetPersistentPointer(1, trade);
+    }
+
+    // Common study specs
+    s_SCNewOrder NewOrder;
+    NewOrder.OrderQuantity = 1;
+    NewOrder.OrderType = SCT_ORDERTYPE_MARKET;
+    NewOrder.TimeInForce = SCT_TIF_DAY;
+
+    // Retrieving ID
+    int64_t &InternalOrderID = sc.GetPersistentInt64(1);
+    int &LastCrossOverSellIndex = sc.GetPersistentInt(2);
+    int &LastSellTradeIndex = sc.GetPersistentInt(3);
+    double &FillPrice = sc.GetPersistentDouble(1);
+
+    if (sc.IsFullRecalculation) {
+        LastSellTradeIndex = 0;
+    }
+
+    // Trading allowed bool
+    bool TradingAllowed = AllowTradingAlways.GetInt() == 1 ? true : tradingAllowedCash(sc);
+
+    // Retrieving Studies
+    SCFloatArray PriceEMWA;
+    SCFloatArray MACD;
+    SCFloatArray MACDMA;
+    SCFloatArray MACDDiff;
+    SCFloatArray ATR;
+
+    sc.GetStudyArrayUsingID(PriceEMWAStudy.GetStudyID(), 0, PriceEMWA);
+    sc.GetStudyArrayUsingID(MACDXStudy.GetStudyID(), 0, MACD);
+    sc.GetStudyArrayUsingID(MACDXStudy.GetStudyID(), 1, MACDMA);
+    sc.GetStudyArrayUsingID(MACDXStudy.GetStudyID(), 2, MACDDiff);
+    sc.GetStudyArrayUsingID(ATRStudy.GetStudyID(), 0, ATR);
+
+    const int Xover = sc.CrossOver(MACD, MACDMA, i);
+    if (Xover==CROSS_FROM_TOP) {
+        LastCrossOverSellIndex = i;
+    }
+
+    const bool EWACond = sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex];
+    const bool sellCondition = EWACond
+            && TradingAllowed
+            && LastSellTradeIndex < LastCrossOverSellIndex
+            && MACD[i] <= 0
+            && MACDDiff[i] <= MaxMACDDiff.GetFloat() // && MACDDiff[i-1] <= MaxMACDDiff.GetFloat() // To avoid entry periods of 1 bar only...
+            && i - LastCrossOverSellIndex <= MaxTicksEntryFromCrossOVer.GetInt();
+
+    s_SCPositionData PositionData;
+    sc.GetTradePosition(PositionData);
+
+    if (sellCondition && trade == NULL) {
+        int orderSubmitted = 0;
+        NewOrder.Target1Offset = 2 * ATR[i];
+        NewOrder.Stop1Offset = 2 * ATR[i];
+        // NewOrder.Stop1Price = sc.High[LastCrossOverSellIndex] + sc.TickSize * 3;
+
+        orderSubmitted = static_cast<int>(sc.SellOrder(NewOrder));
+
+        if (orderSubmitted > 0) {
+            LastSellTradeIndex = LastCrossOverSellIndex;
+            FillPrice = NewOrder.Price1;
+            InternalOrderID = NewOrder.InternalOrderID;
+            trade = new TradeWrapper(InternalOrderID, TargetMode::Flat, 2., 2., BSE_SELL);
+            sc.SetPersistentPointer(1, trade);
+            // TradeId[i] = static_cast<float>(InternalOrderID);
+            SCString Buffer;
+            Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
+            sc.AddMessageToLog(Buffer, 1);
+        }
+    }
+
+    if (trade != NULL) {
+        switch (trade->getParentOrderStatus()) {
+            case SCT_OSC_CANCELED:
+                delete trade;
+                trade = nullptr;
+                break;
+            default:
+                trade->updateOrders(sc);
+                trade->updateAttributes(sc.Close[i], ATR[i]);
+                tradeFilledPrice[i] = static_cast<float>(trade->getFilledPrice());
+                break;
+        }
+
+    }
+
+    lastTradeIndex[i] = static_cast<float>(LastSellTradeIndex);
+    lastXOverIndex[i] = static_cast<float>(LastCrossOverSellIndex);
+
+    TradeId[i] = static_cast<float>(InternalOrderID);
 }
