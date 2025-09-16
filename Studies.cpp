@@ -679,7 +679,10 @@ SCSFExport scsf_StrategyMACDShort(SCStudyInterfaceRef sc) {
         LastCrossOverSellIndex = i;
     }
 
-    const bool EWACond = sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex];
+    const bool EWACond = UseEWAThresh.GetYesNo() == 1
+    ? sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex]
+    : true;
+
     const bool sellCondition = EWACond
             && TradingAllowed
             && LastSellTradeIndex < LastCrossOverSellIndex
@@ -903,7 +906,10 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
         LastCrossOverSellIndex = i;
     }
 
-    const bool EWACond = sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex];
+    const bool EWACond = UseEWAThresh.GetYesNo() == 1
+    ? sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex]
+    : true;
+
     const bool sellCondition = EWACond
             && TradingAllowed
             && LastSellTradeIndex < LastCrossOverSellIndex
