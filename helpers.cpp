@@ -12,8 +12,16 @@ bool IsCleanTick(const float priceOfInterest, SCStudyInterfaceRef sc, const int 
 
 bool tradingAllowedCash(SCStudyInterfaceRef sc) {
     const int BarTime = sc.BaseDateTimeIn[sc.Index].GetTime();
-    const bool TradingAllowed = BarTime >= HMS_TIME(9,  0, 10) && BarTime  < HMS_TIME(14,  45, 0);
+    const bool TradingAllowed = BarTime >= HMS_TIME(9,  30, 0) && BarTime  < HMS_TIME(15,  30, 0);
     return TradingAllowed;
+}
+
+void flattenAllAfterCash(SCStudyInterfaceRef sc) {
+    const int BarTime = sc.BaseDateTimeIn[sc.Index].GetTime();
+    const bool OutOfSession = BarTime < HMS_TIME(9,  30, 0) | BarTime  >= HMS_TIME(15,  30, 0);
+    if (OutOfSession) {
+        sc.FlattenAndCancelAllOrders();
+    }
 }
 
 void orderToLogs(SCStudyInterfaceRef sc, s_SCTradeOrder order, int mode) {
@@ -50,7 +58,7 @@ void highLowCleanPricesInBar(SCStudyInterfaceRef sc, double &minPrice, double &m
     maxPrice = sc.TicksToPriceValue(tmpMax.value());
 }
 
-int BidAskDiffBelowLowestPeak(SCStudyInterfaceRef sc, const int StudyId) {
+void BidAskDiffBelowLowestPeak(SCStudyInterfaceRef sc, const int StudyId) {
     float PeakValleyLinePrice= 0;
     int PeakValleyType = 0;
     int StartIndex = sc.Index;
@@ -72,6 +80,29 @@ int BidAskDiffBelowLowestPeak(SCStudyInterfaceRef sc, const int StudyId) {
             peakValleyIndex);
         peakValleyIndex ++;
         maxPeakValley = std::max<float>(maxPeakValley, PeakValleyLinePrice);
+    }
+}
+
+void LogAttachedStop(int64_t parentKey, SCStudyInterfaceRef sc) {
+    if (s_SCTradeOrder ParentOrder, StopOrder; sc.GetOrderByOrderID(parentKey, ParentOrder) == 1) {
+        const int stopOrderSuccess = sc.GetOrderByOrderID(ParentOrder.StopChildInternalOrderID, StopOrder);
+        if (stopOrderSuccess == 1) {
+            SCString Buffer;
+            Buffer.Format("Current stop price of order %d is %f", StopOrder.InternalOrderID, static_cast<float>(StopOrder.Price1));
+            sc.AddMessageToLog(Buffer, 1);
+        }
+    }
+}
+
+void ModifyAttachedStop(int64_t parentKey, double newStop, SCStudyInterfaceRef sc) {
+    if (s_SCTradeOrder ParentOrder, StopOrder; sc.GetOrderByOrderID(parentKey, ParentOrder) == 1) {
+        const int stopOrderSuccess = sc.GetOrderByOrderID(ParentOrder.StopChildInternalOrderID, StopOrder);
+        if (stopOrderSuccess == 1) {
+            s_SCNewOrder NewStopOrder;
+            NewStopOrder.InternalOrderID = StopOrder.InternalOrderID;
+            NewStopOrder.Price1 = newStop;
+            sc.ModifyOrder(NewStopOrder);
+        }
     }
 }
 

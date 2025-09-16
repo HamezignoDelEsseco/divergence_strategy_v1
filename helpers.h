@@ -33,3 +33,8 @@ void colorAllSubGraphs(SCStudyInterfaceRef sc, const int i, Args&... args) {
         }(args), ...
     );
 }
+void LogAttachedStop(int64_t parentKey, SCStudyInterfaceRef sc);
+
+void ModifyAttachedStop(int64_t parentKey, double newStop, SCStudyInterfaceRef sc);
+
+void flattenAllAfterCash(SCStudyInterfaceRef sc);
