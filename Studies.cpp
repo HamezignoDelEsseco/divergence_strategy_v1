@@ -940,12 +940,12 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
             
             // Create new trade wrapper with proper error handling
             try {
-                trade = new TradeWrapper(InternalOrderID, TargetMode::Flat, 2.0, 2.0, BSE_SELL);
+                trade = new TradeWrapper(InternalOrderID, i, TargetMode::Evolving,  BSE_SELL, 5*sc.TickSize);
                 sc.SetPersistentPointer(1, trade);
                 TradeId[i] = static_cast<float>(InternalOrderID);
                 
                 SCString Buffer;
-                Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
+                Buffer.Format("ADDED ORDER WITH ID %d (Evolving mode)", InternalOrderID);
                 sc.AddMessageToLog(Buffer, 1);
             } catch (const std::exception& e) {
                 SCString Buffer;
@@ -959,15 +959,15 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
     // Update existing trade
     if (trade != nullptr) {
         try {
-            switch (trade->getRealStatus()) {
+            switch (trade->getRealStatus(i)) {
                 case TradeStatus::Terminated:
+                case TradeStatus::Expired:
                     delete trade;
                     trade = nullptr;
                     sc.SetPersistentPointer(1, nullptr);
                     break;
                 default:
-                    trade->updateOrders(sc);
-                    trade->updateAttributes(sc.Close[i], ATR[i]);
+                    trade->updateAll(sc, i, ATR[i]);
                     tradeFilledPrice[i] = static_cast<float>(trade->getFilledPrice());
                     break;
             }

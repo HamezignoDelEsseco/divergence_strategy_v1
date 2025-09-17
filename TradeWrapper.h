@@ -5,28 +5,28 @@
 
 enum class TargetMode { Flat, Evolving };
 
-enum class TradeStatus {Terminated, Active, Other};
+enum class TradeStatus {Terminated, Active, Other, Expired};
 
 class TradeWrapper {
 
 public:
-    TradeWrapper(int64_t parentId, TargetMode mode, double stopATRMult, double targetATRMult, BuySellEnum dir);
+    TradeWrapper(int64_t parentId, int createdIndex, TargetMode mode, BuySellEnum dir, double constPlateauSize, int expirationBars = 10);
 
     // Setters
-    int updateOrders(SCStudyInterfaceRef sc);
+    int fetchAndUpdateOrders(SCStudyInterfaceRef sc);
 
-    void updateAttributes(double price, double atr);
+    void updateAll(SCStudyInterfaceRef sc, int i, double price);
 
-    void updateStopPrice(double atr);
+    void updateStopTargetPrice();
 
-    void updateTargetPrice(double price, double atr);
+    void updatePlateau();
 
     // Getters
     [[nodiscard]] double getFilledPrice() const;
 
-    [[nodiscard]] double getMaxFavorablePrice() const;
+    [[nodiscard]] double getMaxFavorablePriceDifference() const;
 
-    [[nodiscard]] TradeStatus getRealStatus() const;
+    [[nodiscard]] TradeStatus getRealStatus(int index) const;
 
     [[nodiscard]] BuySellEnum getParentOrderDirection() const;
 
@@ -36,19 +36,22 @@ public:
 
     // Sierra Chart ops
     int flattenOrder(SCStudyInterfaceRef sc, double price) const;
+    int modifyStopTargetOrders(SCStudyInterfaceRef sc, int i) const;
 
 private:
     const int64_t parentOrderId;
+    const int createdIndex;
+    const int expirationBars;
     const BuySellEnum parentOrderDirection;
     TargetMode targetMode;
     s_SCTradeOrder parentOrder;
     s_SCTradeOrder stopOrder;
     s_SCTradeOrder targetOrder;
     double fillPrice;
-    double maxFavorablePrice;
-    double stopAtrMultiplier;
-    double targetAtrMultiplier;
+    double maxFavorablePriceDifference;  // Price difference from fill price (starts at 0)
     double targetPrice;
     double stopPrice;
+    double constPlateauSize;
+    int currentPlateau;  // Current ATR plateau level
 };
 #endif //TRADEWRAPPER_H
