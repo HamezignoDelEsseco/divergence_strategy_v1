@@ -10,7 +10,6 @@ TradeWrapper::TradeWrapper(
     )
     : parentOrderId(parentId),
     parentOrderDirection(dir),
-    parentOrderStatus(SCT_OSC_UNSPECIFIED),
     targetMode(mode),
     fillPrice(0),
     maxFavorablePrice(0.0),
@@ -19,26 +18,34 @@ TradeWrapper::TradeWrapper(
     targetPrice(0.0),
     stopPrice(0.0) {}
 
-void TradeWrapper::updateAttributes(const double price, const double atr) {
-    parentOrderStatus = parentOrder.OrderStatusCode;
-
-    if (parentOrderStatus == SCT_OSC_FILLED) {
-        fillPrice = parentOrder.Price1;
-        targetPrice = targetOrder.Price1;
-        stopPrice = stopOrder.Price1;
-
-        switch (parentOrderDirection) {
-            case BSE_BUY:
-                maxFavorablePrice = std::max<double>(maxFavorablePrice, price); break;
-            case BSE_SELL:
-                maxFavorablePrice = std::min<double>(maxFavorablePrice, price); break;
-            case BSE_UNDEFINED:
-                break;
-        }
-
-        updateStopPrice(atr);
-        updateTargetPrice(price, atr);
+[[nodiscard]] TradeStatus TradeWrapper::getRealStatus() const {
+    const bool activeCondition = getStopOrderStatus() == SCT_OSC_OPEN && getTargetOrderStatus() == SCT_OSC_OPEN;
+    const bool terminatedCondition = getStopOrderStatus() == SCT_OSC_CANCELED || getTargetOrderStatus() == SCT_OSC_CANCELED;
+    if (activeCondition) {
+        return TradeStatus::Active;
+    } if (terminatedCondition) {
+        return TradeStatus::Terminated;
     }
+    return TradeStatus::Other;
+}
+
+
+void TradeWrapper::updateAttributes(const double price, const double atr) {
+    fillPrice = parentOrder.Price1;
+    targetPrice = targetOrder.Price1;
+    stopPrice = stopOrder.Price1;
+
+    switch (parentOrderDirection) {
+        case BSE_BUY:
+            maxFavorablePrice = std::max<double>(maxFavorablePrice, price); break;
+        case BSE_SELL:
+            maxFavorablePrice = std::min<double>(maxFavorablePrice, price); break;
+        case BSE_UNDEFINED:
+            break;
+
+    }
+    updateStopPrice(atr);
+    updateTargetPrice(price, atr);
 }
 
 void TradeWrapper::updateStopPrice(const double atr) {
@@ -81,7 +88,7 @@ void TradeWrapper::updateTargetPrice(const double price, const double atr) {
 int TradeWrapper::flattenOrder(SCStudyInterfaceRef sc, const double price) const {
     if (targetMode == TargetMode::Flat) {
         bool flattenPosition = false;
-        switch (parentOrderDirection) {
+        switch (getParentOrderDirection()) {
             case BSE_BUY:
                 flattenPosition = price >= targetPrice; break;
             case BSE_SELL:
@@ -108,7 +115,16 @@ int TradeWrapper::updateOrders(SCStudyInterfaceRef sc) {
 
 [[nodiscard]] double TradeWrapper::getMaxFavorablePrice() const {return maxFavorablePrice;}
 
-[[nodiscard]] SCOrderStatusCodeEnum TradeWrapper::getParentOrderStatus() const {return parentOrderStatus;}
+[[nodiscard]] BuySellEnum TradeWrapper::getParentOrderDirection() const {return parentOrder.BuySell;}
+
+
+[[nodiscard]] SCOrderStatusCodeEnum TradeWrapper::getTargetOrderStatus() const {
+    return stopOrder.OrderStatusCode;
+}
+
+[[nodiscard]] SCOrderStatusCodeEnum TradeWrapper::getStopOrderStatus() const {
+    return targetOrder.OrderStatusCode;
+}
 
 
 

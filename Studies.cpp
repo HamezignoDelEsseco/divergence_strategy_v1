@@ -934,7 +934,7 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
             InternalOrderID = NewOrder.InternalOrderID;
             trade = new TradeWrapper(InternalOrderID, TargetMode::Flat, 2., 2., BSE_SELL);
             sc.SetPersistentPointer(1, trade);
-            // TradeId[i] = static_cast<float>(InternalOrderID);
+            TradeId[i] = static_cast<float>(InternalOrderID);
             SCString Buffer;
             Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
             sc.AddMessageToLog(Buffer, 1);
@@ -942,10 +942,10 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
     }
 
     if (trade != NULL) {
-        switch (trade->getParentOrderStatus()) {
-            case SCT_OSC_CANCELED:
+        switch (trade->getRealStatus()) {
+            case TradeStatus::Terminated:
                 delete trade;
-                trade = nullptr;
+                trade = NULL;
                 break;
             default:
                 trade->updateOrders(sc);
@@ -953,7 +953,6 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
                 tradeFilledPrice[i] = static_cast<float>(trade->getFilledPrice());
                 break;
         }
-
     }
 
     lastTradeIndex[i] = static_cast<float>(LastSellTradeIndex);
