@@ -926,10 +926,41 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
     s_SCPositionData PositionData;
     sc.GetTradePosition(PositionData);
 
+    // Update existing trade
+    if (trade != nullptr) {
+        try {
+            switch (trade->getRealStatus(i)) {
+                case TradeStatus::Terminated:
+                    delete trade;
+                    trade = nullptr;
+                    sc.SetPersistentPointer(1, nullptr);
+                    break;
+                default:
+                    trade->updateAll(sc, i);
+                    if (const int success = trade->modifyStopTargetOrders(sc, i); success == 2) {
+                        SCString Buffer;
+                        sc.AddMessageToLog(Buffer.Format("Successfully changed the order"), 1);
+                    }
+
+                    tradeFilledPrice[i] = static_cast<float>(trade->getMaxFavorablePriceDifference());
+                    break;
+            }
+        } catch (const std::exception& e) {
+            SCString Buffer;
+            Buffer.Format("ERROR in trade update: %s", e.what());
+            sc.AddMessageToLog(Buffer, 1);
+
+            // Clean up on error
+            delete trade;
+            trade = nullptr;
+            sc.SetPersistentPointer(1, nullptr);
+        }
+    }
+
     if (sellCondition && trade == nullptr) {
         int orderSubmitted = 0;
-        NewOrder.Target1Offset = 2 * ATR[i];
-        NewOrder.Stop1Offset = 2 * ATR[i];
+        NewOrder.Target1Offset = 3 * sc.TickSize;
+        NewOrder.Stop1Offset = 3 * sc.TickSize;
 
         orderSubmitted = static_cast<int>(sc.SellOrder(NewOrder));
 
@@ -940,7 +971,7 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
             
             // Create new trade wrapper with proper error handling
             try {
-                trade = new TradeWrapper(InternalOrderID, i, TargetMode::Evolving,  BSE_SELL, 5*sc.TickSize);
+                trade = new TradeWrapper(InternalOrderID, i, TargetMode::Evolving,  BSE_SELL, 2*sc.TickSize);
                 sc.SetPersistentPointer(1, trade);
                 TradeId[i] = static_cast<float>(InternalOrderID);
                 
@@ -956,32 +987,6 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
         }
     }
 
-    // Update existing trade
-    if (trade != nullptr) {
-        try {
-            switch (trade->getRealStatus(i)) {
-                case TradeStatus::Terminated:
-                    delete trade;
-                    trade = nullptr;
-                    sc.SetPersistentPointer(1, nullptr);
-                    break;
-                default:
-                    trade->updateAll(sc, i, sc.Close[i]);
-                    trade->modifyStopTargetOrders(sc, i);
-                    tradeFilledPrice[i] = static_cast<float>(trade->getFilledPrice());
-                    break;
-            }
-        } catch (const std::exception& e) {
-            SCString Buffer;
-            Buffer.Format("ERROR in trade update: %s", e.what());
-            sc.AddMessageToLog(Buffer, 1);
-            
-            // Clean up on error
-            delete trade;
-            trade = nullptr;
-            sc.SetPersistentPointer(1, nullptr);
-        }
-    }
 
     lastTradeIndex[i] = static_cast<float>(LastSellTradeIndex);
     lastXOverIndex[i] = static_cast<float>(LastCrossOverSellIndex);

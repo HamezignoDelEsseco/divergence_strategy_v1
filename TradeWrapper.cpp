@@ -34,7 +34,7 @@ TradeWrapper::TradeWrapper(
 }
 
 
-void TradeWrapper::updateAll(SCStudyInterfaceRef sc, const int i, const double price) {
+void TradeWrapper::updateAll(SCStudyInterfaceRef sc, const int i) {
     fetchAndUpdateOrders(sc);
     if (getRealStatus(i) != TradeStatus::Active) {return;}
     
@@ -45,12 +45,15 @@ void TradeWrapper::updateAll(SCStudyInterfaceRef sc, const int i, const double p
 
     // Calculate price difference from fill price
     double currentPriceDifference = 0.0;
+    double price;
     switch (parentOrderDirection) {
         case BSE_BUY:
+            price = std::max<double>(sc.High[i], sc.Close[i]);
             currentPriceDifference = price - fillPrice;
             maxFavorablePriceDifference = std::max<double>(maxFavorablePriceDifference, currentPriceDifference);
             break;
         case BSE_SELL:
+            price = std::max<double>(sc.Low[i], sc.Close[i]);
             currentPriceDifference = fillPrice - price;
             maxFavorablePriceDifference = std::max<double>(maxFavorablePriceDifference, currentPriceDifference);
             break;
@@ -81,7 +84,7 @@ void TradeWrapper::updateStopTargetPrice() {
 
 
 void TradeWrapper::updatePlateau() {
-    if (const int newPlateau = static_cast<int>(maxFavorablePriceDifference / constPlateauSize); newPlateau > currentPlateau) {
+    if (const int newPlateau = static_cast<int>(maxFavorablePriceDifference / constPlateauSize) + 1; newPlateau > currentPlateau) {
         currentPlateau = newPlateau;
         updateStopTargetPrice();
     }

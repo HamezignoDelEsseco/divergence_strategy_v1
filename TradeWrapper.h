@@ -15,7 +15,7 @@ public:
     // Setters
     int fetchAndUpdateOrders(SCStudyInterfaceRef sc);
 
-    void updateAll(SCStudyInterfaceRef sc, int i, double price);
+    void updateAll(SCStudyInterfaceRef sc, int i);
 
     void updateStopTargetPrice();
 
