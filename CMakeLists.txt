@@ -16,11 +16,10 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
         helpers.cpp
         Studies.cpp
         Studies.cpp
-        TradeManager.h
-        TradeManager.cpp
         TradeWrapper.h
-        TradeWrapper.cpp)
+        TradeWrapper.cpp
+        MACDTradingStudies.cpp)
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "D:\\SierraChartCME\\Data" OUTPUT_NAME "MACD TRADING"
+        RUNTIME_OUTPUT_DIRECTORY "D:\\SierraChartCME\\Data" OUTPUT_NAME "divergenceStudiesMain"
 )
