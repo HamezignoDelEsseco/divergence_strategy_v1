@@ -38,3 +38,7 @@ void LogAttachedStop(int64_t parentKey, SCStudyInterfaceRef sc);
 void ModifyAttachedStop(int64_t parentKey, double newStop, SCStudyInterfaceRef sc);
 
 void flattenAllAfterCash(SCStudyInterfaceRef sc);
+
+bool lowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
+
+bool highestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
