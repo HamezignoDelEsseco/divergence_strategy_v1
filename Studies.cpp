@@ -863,10 +863,16 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
     }
     const int i = sc.Index;
 
-    auto trade = reinterpret_cast<TradeWrapper*>(sc.GetPersistentPointer(1));
+    // Get the trade wrapper from persistent storage
+    auto* trade = static_cast<TradeWrapper*>(sc.GetPersistentPointer(1));
+    
     if (sc.IsFullRecalculation) {
-        trade = NULL;
-        sc.SetPersistentPointer(1, trade);
+        // Clean up existing trade if any
+        if (trade != nullptr) {
+            delete trade;
+            trade = nullptr;
+        }
+        sc.SetPersistentPointer(1, nullptr);
     }
 
     // Common study specs
@@ -902,29 +908,28 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
     sc.GetStudyArrayUsingID(ATRStudy.GetStudyID(), 0, ATR);
 
     const int Xover = sc.CrossOver(MACD, MACDMA, i);
-    if (Xover==CROSS_FROM_TOP) {
+    if (Xover == CROSS_FROM_TOP) {
         LastCrossOverSellIndex = i;
     }
 
     const bool EWACond = UseEWAThresh.GetYesNo() == 1
-    ? sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex]
-    : true;
+        ? sc.Close[i] < PriceEMWA[i] && sc.Close[LastCrossOverSellIndex] < PriceEMWA[LastCrossOverSellIndex]
+        : true;
 
     const bool sellCondition = EWACond
-            && TradingAllowed
-            && LastSellTradeIndex < LastCrossOverSellIndex
-            && MACD[i] <= 0
-            && MACDDiff[i] <= MaxMACDDiff.GetFloat() // && MACDDiff[i-1] <= MaxMACDDiff.GetFloat() // To avoid entry periods of 1 bar only...
-            && i - LastCrossOverSellIndex <= MaxTicksEntryFromCrossOVer.GetInt();
+        && TradingAllowed
+        && LastSellTradeIndex < LastCrossOverSellIndex
+        && MACD[i] <= 0
+        && MACDDiff[i] <= MaxMACDDiff.GetFloat()
+        && i - LastCrossOverSellIndex <= MaxTicksEntryFromCrossOVer.GetInt();
 
     s_SCPositionData PositionData;
     sc.GetTradePosition(PositionData);
 
-    if (sellCondition && trade == NULL) {
+    if (sellCondition && trade == nullptr) {
         int orderSubmitted = 0;
         NewOrder.Target1Offset = 2 * ATR[i];
         NewOrder.Stop1Offset = 2 * ATR[i];
-        // NewOrder.Stop1Price = sc.High[LastCrossOverSellIndex] + sc.TickSize * 3;
 
         orderSubmitted = static_cast<int>(sc.SellOrder(NewOrder));
 
@@ -932,31 +937,53 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
             LastSellTradeIndex = LastCrossOverSellIndex;
             FillPrice = NewOrder.Price1;
             InternalOrderID = NewOrder.InternalOrderID;
-            trade = new TradeWrapper(InternalOrderID, TargetMode::Flat, 2., 2., BSE_SELL);
-            sc.SetPersistentPointer(1, trade);
-            TradeId[i] = static_cast<float>(InternalOrderID);
-            SCString Buffer;
-            Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
-            sc.AddMessageToLog(Buffer, 1);
+            
+            // Create new trade wrapper with proper error handling
+            try {
+                trade = new TradeWrapper(InternalOrderID, TargetMode::Flat, 2.0, 2.0, BSE_SELL);
+                sc.SetPersistentPointer(1, trade);
+                TradeId[i] = static_cast<float>(InternalOrderID);
+                
+                SCString Buffer;
+                Buffer.Format("ADDED ORDER WITH ID %d", InternalOrderID);
+                sc.AddMessageToLog(Buffer, 1);
+            } catch (const std::exception& e) {
+                SCString Buffer;
+                Buffer.Format("ERROR: Failed to create TradeWrapper: %s", e.what());
+                sc.AddMessageToLog(Buffer, 1);
+                trade = nullptr;
+            }
         }
     }
 
-    if (trade != NULL) {
-        switch (trade->getRealStatus()) {
-            case TradeStatus::Terminated:
-                delete trade;
-                trade = NULL;
-                break;
-            default:
-                trade->updateOrders(sc);
-                trade->updateAttributes(sc.Close[i], ATR[i]);
-                tradeFilledPrice[i] = static_cast<float>(trade->getFilledPrice());
-                break;
+    // Update existing trade
+    if (trade != nullptr) {
+        try {
+            switch (trade->getRealStatus()) {
+                case TradeStatus::Terminated:
+                    delete trade;
+                    trade = nullptr;
+                    sc.SetPersistentPointer(1, nullptr);
+                    break;
+                default:
+                    trade->updateOrders(sc);
+                    trade->updateAttributes(sc.Close[i], ATR[i]);
+                    tradeFilledPrice[i] = static_cast<float>(trade->getFilledPrice());
+                    break;
+            }
+        } catch (const std::exception& e) {
+            SCString Buffer;
+            Buffer.Format("ERROR in trade update: %s", e.what());
+            sc.AddMessageToLog(Buffer, 1);
+            
+            // Clean up on error
+            delete trade;
+            trade = nullptr;
+            sc.SetPersistentPointer(1, nullptr);
         }
     }
 
     lastTradeIndex[i] = static_cast<float>(LastSellTradeIndex);
     lastXOverIndex[i] = static_cast<float>(LastCrossOverSellIndex);
-
     TradeId[i] = static_cast<float>(InternalOrderID);
 }

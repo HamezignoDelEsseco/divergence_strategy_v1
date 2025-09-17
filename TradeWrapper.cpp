@@ -119,11 +119,11 @@ int TradeWrapper::updateOrders(SCStudyInterfaceRef sc) {
 
 
 [[nodiscard]] SCOrderStatusCodeEnum TradeWrapper::getTargetOrderStatus() const {
-    return stopOrder.OrderStatusCode;
+    return targetOrder.OrderStatusCode;
 }
 
 [[nodiscard]] SCOrderStatusCodeEnum TradeWrapper::getStopOrderStatus() const {
-    return targetOrder.OrderStatusCode;
+    return stopOrder.OrderStatusCode;
 }
 
 
