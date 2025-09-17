@@ -961,13 +961,13 @@ SCSFExport scsf_StrategyMACDShortFromManager(SCStudyInterfaceRef sc) {
         try {
             switch (trade->getRealStatus(i)) {
                 case TradeStatus::Terminated:
-                case TradeStatus::Expired:
                     delete trade;
                     trade = nullptr;
                     sc.SetPersistentPointer(1, nullptr);
                     break;
                 default:
-                    trade->updateAll(sc, i, ATR[i]);
+                    trade->updateAll(sc, i, sc.Close[i]);
+                    trade->modifyStopTargetOrders(sc, i);
                     tradeFilledPrice[i] = static_cast<float>(trade->getFilledPrice());
                     break;
             }

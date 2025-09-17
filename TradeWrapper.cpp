@@ -22,13 +22,9 @@ TradeWrapper::TradeWrapper(
       currentPlateau(0) {}
 
 [[nodiscard]] TradeStatus TradeWrapper::getRealStatus(const int index) const {
-    if (index - createdIndex > expirationBars) {
-        return TradeStatus::Expired; // Will be deleted
-    }
-
     const bool priceCondition = parentOrder.Price1 != 0 && stopOrder.Price1 != 0 && targetOrder.Price1 != 0;
     const bool activeCondition = getStopOrderStatus() == SCT_OSC_OPEN && getTargetOrderStatus() == SCT_OSC_OPEN && priceCondition;
-    const bool terminatedCondition = getStopOrderStatus() == SCT_OSC_CANCELED || getTargetOrderStatus() == SCT_OSC_CANCELED && priceCondition;
+    const bool terminatedCondition = (getStopOrderStatus() == SCT_OSC_CANCELED || getTargetOrderStatus() == SCT_OSC_CANCELED) && priceCondition;
     if (activeCondition) {
         return TradeStatus::Active;
     } if (terminatedCondition) {
