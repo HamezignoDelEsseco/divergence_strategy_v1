@@ -13,7 +13,7 @@
 #include "helpers.h"
 #include "sierrachart.h"
 
-SCDLLName("DIVERGENCE TRADING MAIN")
+SCDLLName("DEBUG - HIGH LOW IMBALANCE")
 
 SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
     /*
