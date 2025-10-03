@@ -17,8 +17,7 @@ SCDLLName("DEBUG - HIGH LOW IMBALANCE")
 
 SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
     /*
-     * This indicator is stating whether a trade should be CONSIDERED. It is NOT there
-     *
+     * This indicator is stating whether a trade should be CONSIDERED
      */
     SCInputRef BidAskDiffStudy = sc.Input[0];
     SCInputRef RangeBarPredictors = sc.Input[1];
