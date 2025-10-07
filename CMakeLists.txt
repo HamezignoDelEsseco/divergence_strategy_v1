@@ -20,7 +20,9 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
         TradeWrapper.cpp
         MACDTradingStudies.cpp
         HelperStudies.cpp
-        UpDownTickCost.cpp)
+        UpDownTickCost.cpp
+        PriceMap.h
+)
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "D:\\SierraChartCME\\Data" OUTPUT_NAME "divergenceStudiesDebug"
