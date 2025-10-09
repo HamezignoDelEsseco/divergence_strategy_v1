@@ -13,7 +13,7 @@
 #include "helpers.h"
 #include "sierrachart.h"
 
-SCDLLName("DIVERGENCE TRADING MAIN")
+SCDLLName("COMPRESSION EXTENSION TRADING")
 
 SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
     /*
