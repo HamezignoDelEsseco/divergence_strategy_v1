@@ -16,6 +16,24 @@ bool tradingAllowedCash(SCStudyInterfaceRef sc) {
     return TradingAllowed;
 }
 
+bool isBefore8AM(SCStudyInterfaceRef sc) {
+    const int BarTime = sc.BaseDateTimeIn[sc.Index].GetTime();
+    const bool timeCond = BarTime > HMS_TIME(0,  0, 0) && BarTime  <= HMS_TIME(8,  0, 0);
+    return timeCond;
+}
+
+bool isAfter3PM(SCStudyInterfaceRef sc) {
+    const int BarTime = sc.BaseDateTimeIn[sc.Index].GetTime();
+    const bool timeCond = BarTime > HMS_TIME(15,  0, 0);
+    return timeCond;
+}
+
+bool isBetween830And1555(SCStudyInterfaceRef sc) {
+    const int BarTime = sc.BaseDateTimeIn[sc.Index].GetTime();
+    const bool timeCond = BarTime > HMS_TIME(0,  0, 0) && BarTime  <= HMS_TIME(8,  0, 0);
+    return timeCond;
+}
+
 void flattenAllAfterCash(SCStudyInterfaceRef sc) {
     const int BarTime = sc.BaseDateTimeIn[sc.Index].GetTime();
     const bool OutOfSession = BarTime < HMS_TIME(9,  30, 0) | BarTime  >= HMS_TIME(15,  30, 0);

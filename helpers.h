@@ -12,6 +12,12 @@ bool IsCleanTick(float priceOfInterest, SCStudyInterfaceRef sc, int minVolume = 
 
 bool tradingAllowedCash(SCStudyInterfaceRef sc);
 
+bool isBefore8AM(SCStudyInterfaceRef sc);
+
+bool isBetween830And1555(SCStudyInterfaceRef sc);
+
+bool isAfter3PM(SCStudyInterfaceRef sc);
+
 void orderToLogs(SCStudyInterfaceRef sc, s_SCTradeOrder order);
 
 void highLowCleanPricesInBar(SCStudyInterfaceRef sc, double& minPrice, double& maxPrice, int offset = 0);
