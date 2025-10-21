@@ -187,3 +187,12 @@ int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder) {
     }
     return res;
 }
+
+//int modifyParentPrice(SCStudyInterfaceRef sc, const uint32_t parentId, const float price) {
+//    s_SCNewOrder modifyOrder;
+//    modifyOrder.InternalOrderID = parentId;
+//    modifyOrder.Price1 = price;
+//    const int success = sc.ModifyOrder(modifyOrder);
+//
+//    return success;
+//}

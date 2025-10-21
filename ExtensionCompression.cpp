@@ -1,6 +1,6 @@
-#include "helpers.h"
 #include "sierrachart.h"
 
+std::map<float, int> retestsMap;
 
 enum PendingEntryType
 {
@@ -37,6 +37,16 @@ void ResetSubgraphsAtIndex(int index, Subgraphs&... sgs)
 {
     // Fold expression: expands the parameter pack and applies the reset
     ((sgs[index] = 0.0f), ...);
+}
+
+float getEntryPrice(const float fvhsr, const float fvlsr, const float h, const float l) {
+    if (fvhsr !=0) {
+        return h;
+    }
+    if (fvlsr != 0) {
+        return l;
+    }
+    return 0;
 }
 
 SCSFExport scsf_CompressionExtensionSignal(SCStudyInterfaceRef sc) {

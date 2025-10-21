@@ -290,5 +290,11 @@ SCSFExport scsf_WorkingOrderId(SCStudyInterfaceRef sc) {
     uint32_t workingOrderId = 0;
     const int activeStatus = workingParentOrder(sc, workingOrderId);
     ActivityFlag[i] = activeStatus;
+
+    float newPrice = sc.Close[i-2000];
+    s_SCNewOrder ModifiyOrder;
+    ModifiyOrder.InternalOrderID = workingOrderId;
+    ModifiyOrder.Price1 = newPrice;
+    const int success = sc.ModifyOrder(ModifiyOrder);
 }
 
