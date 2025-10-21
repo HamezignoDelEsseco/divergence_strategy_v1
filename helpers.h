@@ -48,3 +48,9 @@ void flattenAllAfterCash(SCStudyInterfaceRef sc);
 bool lowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
 
 bool highestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
+
+int tradeActivityStatus(
+    SCStudyInterfaceRef sc, int& workingParentOrders, int& workingAttachedOrders,
+    int& filledParentOrders,  int& filledAttachedOrders, int& totalTradesLoopedOn
+    );
+int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder);

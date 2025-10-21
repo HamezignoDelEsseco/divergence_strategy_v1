@@ -140,3 +140,50 @@ bool highestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
     }
     return target == nBars;
 }
+
+int tradeActivityStatus(SCStudyInterfaceRef sc, int &workingParentOrders, int &workingAttachedOrders,
+    int &filledParentOrders, int &filledAttachedOrders, int& totalTradesLoopedOn) {
+    int Index = 0;
+    s_SCTradeOrder OrderDetails;
+    while(sc.GetOrderByIndex(Index, OrderDetails) != SCTRADING_ORDER_ERROR)
+    {
+        Index++;
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID == 0) {
+            workingParentOrders++;
+        }
+
+        if (OrderDetails.OrderStatusCode == SCT_OSC_FILLED && OrderDetails.ParentInternalOrderID == 0) {
+            filledParentOrders++;
+        }
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID != 0) {
+            workingAttachedOrders ++;
+        }
+
+        if (OrderDetails.OrderStatusCode == SCT_OSC_FILLED && OrderDetails.ParentInternalOrderID != 0) {
+            filledAttachedOrders++;
+        }
+
+        //Get the internal order ID
+    }
+    const int res = workingParentOrders + workingAttachedOrders > 0 ? 1 : 0;
+    totalTradesLoopedOn = Index;
+    return res;
+}
+
+int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder) {
+    int Index = 0;
+    s_SCTradeOrder OrderDetails;
+    int res = 0;
+    while(sc.GetOrderByIndex(Index, OrderDetails) != SCTRADING_ORDER_ERROR)
+    {
+        Index++;
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID == 0) {
+            workingParentOrder = OrderDetails.InternalOrderID;
+            res = 1;
+        }
+    }
+    return res;
+}
