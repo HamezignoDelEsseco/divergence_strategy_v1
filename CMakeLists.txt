@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.0)
 
-include_directories("D:\\SierraChartCME\\ACS_Source" "{CMAKE_SOURCE_DIR}")
+include_directories("D:\\Sierra Chart\\ACS_Source" "{CMAKE_SOURCE_DIR}")
 
 message(STATUS "Source dir: ${CMAKE_SOURCE_DIR}")
 message(STATUS "Binary dir: ${CMAKE_BINARY_DIR}")
@@ -24,5 +24,5 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
 )
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "D:\\SierraChartCME\\Data" OUTPUT_NAME "extensionCompression"
+        RUNTIME_OUTPUT_DIRECTORY "D:\\Sierra Chart\\Data" OUTPUT_NAME "extensionCompression"
 )
