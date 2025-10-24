@@ -260,6 +260,14 @@ SCSFExport scsf_TradingStatus(SCStudyInterfaceRef sc) {
     ActivityFlag[i] = activeStatus;
 }
 
+int modiFyOrder(SCStudyInterfaceRef sc, const uint32_t parentOrderId, float newPrice) {
+    s_SCNewOrder ModifiyOrder;
+    ModifiyOrder.InternalOrderID = parentOrderId;
+    ModifiyOrder.Price1 = newPrice;
+    const int success = sc.ModifyOrder(ModifiyOrder);
+    return success;
+}
+
 
 SCSFExport scsf_WorkingOrderId(SCStudyInterfaceRef sc) {
     SCInputRef Enabled = sc.Input[0];;
@@ -292,9 +300,13 @@ SCSFExport scsf_WorkingOrderId(SCStudyInterfaceRef sc) {
     ActivityFlag[i] = activeStatus;
 
     float newPrice = sc.Close[i-2000];
-    s_SCNewOrder ModifiyOrder;
-    ModifiyOrder.InternalOrderID = workingOrderId;
-    ModifiyOrder.Price1 = newPrice;
-    const int success = sc.ModifyOrder(ModifiyOrder);
+    // Toggle below to modify from function
+    modiFyOrder(sc, workingOrderId, newPrice);
+
+    /// Toggle below to modify from study directly
+    // s_SCNewOrder ModifiyOrder;
+    // ModifiyOrder.InternalOrderID = workingOrderId;
+    // ModifiyOrder.Price1 = newPrice;
+    // const int success = sc.ModifyOrder(ModifiyOrder);
 }
 

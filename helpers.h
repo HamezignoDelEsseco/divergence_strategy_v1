@@ -56,4 +56,5 @@ int tradeActivityStatus(
 
 int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder);
 
+int isInsideTrade(SCStudyInterfaceRef sc);
 // int modifyParentPrice(SCStudyInterfaceRef sc, uint32_t parentId, float price);

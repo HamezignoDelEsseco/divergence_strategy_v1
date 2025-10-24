@@ -172,6 +172,28 @@ int tradeActivityStatus(SCStudyInterfaceRef sc, int &workingParentOrders, int &w
     return res;
 }
 
+
+int isInsideTrade(SCStudyInterfaceRef sc) {
+    int Index = 0;
+    int workingParents = 0;
+    int workingAttached = 0;
+    s_SCTradeOrder OrderDetails;
+    while(sc.GetOrderByIndex(Index, OrderDetails) != SCTRADING_ORDER_ERROR)
+    {
+        Index++;
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID == 0) {
+            workingParents++;
+        }
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID != 0) {
+            workingAttached ++;
+        }
+        //Get the internal order ID
+    }
+    return workingParents == 0 && workingAttached > 0 ? 1 : 0;
+}
+
 int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder) {
     int Index = 0;
     s_SCTradeOrder OrderDetails;
