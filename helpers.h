@@ -42,3 +42,5 @@ void flattenAllAfterCash(SCStudyInterfaceRef sc);
 bool lowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
 
 bool highestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
+
+bool consecutivePosNegDeltaVol(SCFloatArray& askbidvoldiff,  int nBars, int index, int direction);

@@ -13,7 +13,7 @@
 #include "helpers.h"
 #include "sierrachart.h"
 
-SCDLLName("DIVERGENCE TRADING MAIN")
+SCDLLName("DELTA VOLUME TRADING")
 
 SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
     /*

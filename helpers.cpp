@@ -122,3 +122,16 @@ bool highestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
     }
     return target == nBars;
 }
+
+bool consecutivePosNegDeltaVol(SCFloatArray& askbidvoldiff, const int nBars, const int index, const int direction) {
+    int target = 0;
+    for (int i = 0; i < nBars; i++) {
+        if (direction >=0) {
+            target += askbidvoldiff[index-i] > 0 ? 1 : 0;
+
+        } else {
+            target += askbidvoldiff[index-i] < 0 ? 1 : 0;
+        }
+    }
+    return target == nBars;
+}
