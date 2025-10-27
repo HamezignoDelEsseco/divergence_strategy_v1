@@ -115,6 +115,17 @@ bool lowestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
 }
 
 
+bool isNewTradingDayRange(SCStudyInterfaceRef sc, int range, int Ix) {
+    int result = 0;
+    for (int i = 0; i < range; i++) {
+        if (sc.IsNewTradingDay(Ix - i)) {
+            result++;
+        }
+    }
+    return result > 0;
+}
+
+
 bool highestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
     int target = 0;
     for (int i = 0; i < nBars; i++) {
@@ -134,4 +145,41 @@ bool consecutivePosNegDeltaVol(SCFloatArray& askbidvoldiff, const int nBars, con
         }
     }
     return target == nBars;
+}
+
+int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder) {
+    int Index = 0;
+    s_SCTradeOrder OrderDetails;
+    int res = 0;
+    while(sc.GetOrderByIndex(Index, OrderDetails) != SCTRADING_ORDER_ERROR)
+    {
+        Index++;
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID == 0) {
+            workingParentOrder = OrderDetails.InternalOrderID;
+            res = 1;
+        }
+    }
+    return res;
+}
+
+int isInsideTrade(SCStudyInterfaceRef sc) {
+    int Index = 0;
+    int workingParents = 0;
+    int workingAttached = 0;
+    s_SCTradeOrder OrderDetails;
+    while(sc.GetOrderByIndex(Index, OrderDetails) != SCTRADING_ORDER_ERROR)
+    {
+        Index++;
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID == 0) {
+            workingParents++;
+        }
+
+        if (IsWorkingOrderStatus(OrderDetails.OrderStatusCode) && OrderDetails.ParentInternalOrderID != 0) {
+            workingAttached ++;
+        }
+        //Get the internal order ID
+    }
+    return workingParents == 0 && workingAttached > 0 ? 1 : 0;
 }
