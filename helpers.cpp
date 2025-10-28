@@ -183,3 +183,14 @@ int isInsideTrade(SCStudyInterfaceRef sc) {
     }
     return workingParents == 0 && workingAttached > 0 ? 1 : 0;
 }
+
+void highestLowestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index, double& lowest, double &highest) {
+    double high = sc.High[index];
+    double low = sc.Low[index];
+    for (int i = 1; i < nBars; i++) {
+        high = sc.High[index - i] > high ? sc.High[index - i] : high;
+        low = sc.Low[index - i] < low ? sc.Low[index - i] : low;
+    }
+    lowest = low;
+    highest = high;
+}

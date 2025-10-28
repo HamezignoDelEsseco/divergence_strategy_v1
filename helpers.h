@@ -43,6 +43,8 @@ bool lowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
 
 bool highestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
 
+void highestLowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index, double& lowest, double &highest);
+
 bool consecutivePosNegDeltaVol(SCFloatArray& askbidvoldiff,  int nBars, int index, int direction);
 
 bool isNewTradingDayRange(SCStudyInterfaceRef sc, int range, int Ix);
