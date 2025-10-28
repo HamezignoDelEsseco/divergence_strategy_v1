@@ -162,3 +162,88 @@ SCSFExport scsf_EndOfNStreaksSignal(SCStudyInterfaceRef sc) {
 
     FirstTargetInTicks[i] = targetInTicks;
 }
+
+SCSFExport scsf_FollowTheStreakSignal(SCStudyInterfaceRef sc) {
+
+    SCInputRef DVStreaksStudy = sc.Input[0];
+    SCInputRef NumberBarsStudy = sc.Input[1];
+    SCInputRef NStreak = sc.Input[2];
+    SCInputRef StopLossBufferInTicks = sc.Input[3];
+
+
+    SCSubgraphRef TradeSignal = sc.Subgraph[0];
+    SCSubgraphRef StopLossPrice = sc.Subgraph[1];
+    SCSubgraphRef FirstTargetInTicks = sc.Subgraph[2];
+
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+
+        sc.GraphName = "Follow the streak signal";
+        sc.StudyDescription = "";
+
+        // Inputs
+        DVStreaksStudy.Name = "Delta volume streaks study";
+        DVStreaksStudy.SetStudyID(2);
+
+        NumberBarsStudy.Name = "Number bars study";
+        NumberBarsStudy.SetStudyID(1);
+
+        NStreak.Name = "Minimum N Streaks to end";
+        NStreak.SetIntLimits(3, 10);
+        NStreak.SetInt(5);
+
+        StopLossBufferInTicks.Name = "Stop loss buffer in ticks";
+        StopLossBufferInTicks.SetIntLimits(0, 200);
+        StopLossBufferInTicks.SetInt(0);
+
+        // Outputs
+        TradeSignal.Name = "Trade signal";
+        TradeSignal.DrawStyle = DRAWSTYLE_IGNORE;
+
+        StopLossPrice.Name = "Stop loss price";
+        StopLossPrice.DrawStyle = DRAWSTYLE_IGNORE;
+
+        FirstTargetInTicks.Name = "First target in ticks";
+        FirstTargetInTicks.DrawStyle = DRAWSTYLE_IGNORE;
+
+    }
+    const int i = sc.Index;
+    SCFloatArray AskVBidV;
+    sc.GetStudyArrayUsingID(NumberBarsStudy.GetStudyID(), 0, AskVBidV);
+
+    SCFloatArray StreakDirection;
+    SCFloatArray StreakLow;
+    SCFloatArray StreakHigh;
+    SCFloatArray StreakLength;
+    sc.GetStudyArrayUsingID(DVStreaksStudy.GetStudyID(), 0, StreakDirection);
+    sc.GetStudyArrayUsingID(DVStreaksStudy.GetStudyID(), 1, StreakHigh);
+    sc.GetStudyArrayUsingID(DVStreaksStudy.GetStudyID(), 2, StreakLow);
+    sc.GetStudyArrayUsingID(DVStreaksStudy.GetStudyID(), 3, StreakLength);
+
+    float& stopLossPrice = sc.GetPersistentFloat(1);
+    float& targetInTicks = sc.GetPersistentFloat(2);
+
+
+    if (StreakLength[i] >= NStreak.GetFloat()) {
+
+        if (AskVBidV[i] > 0 && StreakDirection[i] < 0 && sc.Close[i] > sc.High[i-1]) {
+            TradeSignal[i] = 1;
+            stopLossPrice = std::min<float>(StreakLow[i-1], sc.Low[i]);
+            StopLossPrice[i] = stopLossPrice - sc.TickSize * StopLossBufferInTicks.GetFloat();
+            if (FirstTargetInTicks[i] == 0) {
+                targetInTicks = (sc.Close[i] - sc.Low[i-1]) / sc.TickSize;
+            }
+        }
+        if (AskVBidV[i] < 0 && StreakDirection[i] > 0 && sc.Close[i] < sc.Low[i-1]) {
+            TradeSignal[i] = -1;
+            stopLossPrice = std::max<float>(StreakHigh[i-1], sc.High[i]);
+            StopLossPrice[i] = stopLossPrice + sc.TickSize * StopLossBufferInTicks.GetFloat();
+            if (FirstTargetInTicks[i] == 0) {
+                targetInTicks = (sc.High[i-1] - sc.Close[i]) / sc.TickSize;
+            }
+        }
+    }
+
+    FirstTargetInTicks[i] = targetInTicks;
+}
