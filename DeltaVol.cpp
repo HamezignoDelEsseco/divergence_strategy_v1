@@ -114,8 +114,7 @@ SCSFExport scsf_DeltaVolLongShortSignal(SCStudyInterfaceRef sc) {
     SCSubgraphRef Stop = sc.Subgraph[1];
     SCSubgraphRef TargetFirst = sc.Subgraph[2];
     SCSubgraphRef MITEntry = sc.Subgraph[3];
-    //SCSubgraphRef ContradictingIdx = sc.Subgraph[4];
-
+    SCSubgraphRef Reversal = sc.Subgraph[4];
 
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
@@ -145,10 +144,13 @@ SCSFExport scsf_DeltaVolLongShortSignal(SCStudyInterfaceRef sc) {
         Stop.DrawStyle = DRAWSTYLE_IGNORE;
 
         TargetFirst.Name = "Target first (in ticks)";
-        TargetFirst.DrawStyle = DRAWSTYLE_LINE;
+        TargetFirst.DrawStyle = DRAWSTYLE_IGNORE;
 
         MITEntry.Name = "MIT entry price";
-        MITEntry.DrawStyle = DRAWSTYLE_LINE;
+        MITEntry.DrawStyle = DRAWSTYLE_IGNORE;
+
+        Reversal.Name = "Reversal signal";
+        Reversal.DrawStyle = DRAWSTYLE_LINE;
     }
     SCFloatArray AskVBidV;
     sc.GetStudyArrayUsingID(NumberBarsStudy.GetStudyID(), 0, AskVBidV);
@@ -202,6 +204,21 @@ SCSFExport scsf_DeltaVolLongShortSignal(SCStudyInterfaceRef sc) {
         stopLoss = sc.Low[i-1] - sc.TickSize;
         targetFirstInTickOffset = (sc.High[i-1] - sc.Low[i-1]) / sc.TickSize;
         mitEntryPrice = sc.High[i-1] - sc.TickSize;
+    }
+
+    // The reversal condition is an IMMEDIATE switch
+    const bool reverseToShort = TradeSignal[i] == 1 && AskVBidV[i] < 0 && sc.Close[i] - sc.TickSize <= sc.Low[i-1];
+    const bool reverseToLong = TradeSignal[i] == -1 && AskVBidV[i] > 0 && sc.Close[i] + sc.TickSize >= sc.High[i-1];
+
+    if (TradeSignal[i-2] == 1) {
+        const bool iAmHere = true;
+    }
+
+    if (reverseToLong) {
+        Reversal[i] = 1;
+    }
+    if (reverseToShort) {
+        Reversal[i] = -1;
     }
 
     Stop[i] = static_cast<float>(stopLoss);
@@ -300,9 +317,7 @@ SCSFExport scsf_DeltaVolTbT(SCStudyInterfaceRef sc) {
 
 
 
-SCSFExport scsf_DeltaVolShortTrader(SCStudyInterfaceRef sc) {
-
-    // Trading with max 5 contracts:
+SCSFExport scsf_DeltaVolLongTrader(SCStudyInterfaceRef sc) {
 
     SCInputRef SignalStudy = sc.Input[0];
     SCInputRef MaxTargetInTicks = sc.Input[1];
@@ -315,7 +330,7 @@ SCSFExport scsf_DeltaVolShortTrader(SCStudyInterfaceRef sc) {
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
 
-        sc.GraphName = "Delta volume trader 1 contract";
+        sc.GraphName = "Delta volume trader dummy (long)";
 
         // Inputs
         SignalStudy.Name = "Signal study";
@@ -364,7 +379,6 @@ SCSFExport scsf_DeltaVolShortTrader(SCStudyInterfaceRef sc) {
         return;
     }
 
-
     int& barOderPlaced = sc.GetPersistentInt(1);
 
     SCFloatArray TradeSignal;
@@ -377,13 +391,8 @@ SCSFExport scsf_DeltaVolShortTrader(SCStudyInterfaceRef sc) {
     sc.GetStudyArrayUsingID(SignalStudy.GetStudyID(), 2, TargetFirstInTicks);
     sc.GetStudyArrayUsingID(SignalStudy.GetStudyID(), 3, EntryPrice);
 
-    //uint32_t workingParentOrderId = 0;
-    //const int hasWorkingParent = workingParentOrder(sc, workingParentOrderId);
 
     if (TradeSignal[i] == 1 && !isInsideTrade(sc)) {
-        // if (i - barOderPlaced >= NumBarsBeforeCancelOrder.GetInt()) {
-        //     sc.FlattenAndCancelAllOrders();
-        // }
         s_SCNewOrder newOrder;
         newOrder.OrderType = SCT_ORDERTYPE_MARKET;
         newOrder.TimeInForce = SCT_TIF_GOOD_TILL_CANCELED;
@@ -397,6 +406,151 @@ SCSFExport scsf_DeltaVolShortTrader(SCStudyInterfaceRef sc) {
         newOrder.StopAllOffset = TargetFirstInTicks[i] * sc.TickSize;
         newOrder.TriggeredTrailStopTriggerPriceOffset = StopTriggerOffsetInTicks.GetFloat() * sc.TickSize;
         newOrder.TriggeredTrailStopTrailPriceOffset = TargetFirstInTicks[i] * sc.TickSize;
+
+        if (const double orderPlaced = sc.BuyEntry(newOrder); orderPlaced > 0) {
+            barOderPlaced = i;
+        }
+
+    }
+}
+
+SCSFExport scsf_DeltaVolLongTrader3OCO(SCStudyInterfaceRef sc) {
+
+    SCInputRef SignalStudy = sc.Input[0];
+    SCInputRef MaxTargetInTicksForLongPos = sc.Input[1];
+    SCInputRef NumBarsBeforeCancelOrder = sc.Input[2];
+    SCInputRef EndTradingTime = sc.Input[3];
+    SCInputRef Quantity = sc.Input[4];
+    SCInputRef QuantityBE = sc.Input[5];
+    SCInputRef QuantityLong = sc.Input[6];
+    SCInputRef MaxDailyPLInTicks = sc.Input[7];
+    SCInputRef MinDailyPLInTicks = sc.Input[8];
+
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+
+        sc.GraphName = "Delta volume trader with 3 OCO (long)";
+
+        // Inputs
+        SignalStudy.Name = "Signal study";
+        SignalStudy.SetStudyID(2);
+
+        MaxTargetInTicksForLongPos.Name = "Maximum target in ticks for long contract";
+        MaxTargetInTicksForLongPos.SetIntLimits(5, 500);
+        MaxTargetInTicksForLongPos.SetInt(100);
+
+        NumBarsBeforeCancelOrder.Name = "Number of bars till order cancel";
+        NumBarsBeforeCancelOrder.SetIntLimits(1, 20);
+        NumBarsBeforeCancelOrder.SetInt(5);
+
+        Quantity.Name = "Quantity mult"; // Total trade quantity
+        Quantity.SetIntLimits(1, 5);
+        Quantity.SetInt(2);
+
+        QuantityLong.Name = "Quantity Long"; // Total trade quantity
+        QuantityLong.SetIntLimits(1, 5);
+        QuantityLong.SetInt(1);
+
+        QuantityBE.Name = "Quantity BE"; // Total quantity that breaks even
+        QuantityBE.SetIntLimits(1, 5);
+        QuantityBE.SetInt(3);
+
+        MaxDailyPLInTicks.Name = "Maximum PL in ticks per day"; // Total quantity that breaks even
+        MaxDailyPLInTicks.SetIntLimits(10, 250);
+        MaxDailyPLInTicks.SetInt(200);
+
+        MinDailyPLInTicks.Name = "Minimum PL in ticks per day"; // Total quantity that breaks even
+        MinDailyPLInTicks.SetIntLimits(-150, -10);
+        MinDailyPLInTicks.SetInt(-100);
+
+        EndTradingTime.Name = "End trading time";
+        EndTradingTime.SetTime(HMS_TIME(15,45,0));
+
+        sc.HideStudy = true;
+
+        // Outputs
+        sc.SupportReversals = true;
+        sc.AllowOnlyOneTradePerBar = true;
+        sc.MaximumPositionAllowed = 10;
+        sc.MaintainTradeStatisticsAndTradesData = true;
+    }
+
+    if (sc.LastCallToFunction)
+        return;
+
+    if (sc.IsFullRecalculation)
+        return;
+
+    if (sc.Index < sc.ArraySize-1)
+        return;
+
+    const int i = sc.Index;
+
+
+    s_SCPositionData PositionData;
+    sc.GetTradePosition(PositionData);
+
+    if (sc.BaseDateTimeIn[i].GetTime() > EndTradingTime.GetTime()) {
+        if (PositionData.PositionQuantity != 0) {
+            sc.FlattenAndCancelAllOrders();
+        }
+        return;
+    }
+
+    if (
+        (PositionData.DailyProfitLoss >= MaxDailyPLInTicks.GetInt() || PositionData.DailyProfitLoss <= MinDailyPLInTicks.GetInt())
+        && PositionData.PositionQuantity ==0
+        ) {
+        return;
+    }
+
+    int& barOderPlaced = sc.GetPersistentInt(1);
+
+    SCFloatArray TradeSignal;
+    SCFloatArray StopLossPrice;
+    SCFloatArray TargetFirstInTicks;
+    SCFloatArray EntryPrice;
+
+    sc.GetStudyArrayUsingID(SignalStudy.GetStudyID(), 0, TradeSignal);
+    sc.GetStudyArrayUsingID(SignalStudy.GetStudyID(), 1, StopLossPrice);
+    sc.GetStudyArrayUsingID(SignalStudy.GetStudyID(), 2, TargetFirstInTicks);
+    sc.GetStudyArrayUsingID(SignalStudy.GetStudyID(), 3, EntryPrice);
+    //uint32_t workingParentOrderId = 0;
+    //const int hasWorkingParent = workingParentOrder(sc, workingParentOrderId);
+
+    if (TradeSignal[i] == 1 && PositionData.PositionQuantity == 0) {
+        // if (i - barOderPlaced >= NumBarsBeforeCancelOrder.GetInt()) {
+        //     sc.FlattenAndCancelAllOrders();
+        // }
+        s_SCNewOrder newOrder;
+
+        newOrder.OrderType = SCT_ORDERTYPE_MARKET;
+        newOrder.TimeInForce = SCT_TIF_DAY;
+        newOrder.OrderQuantity = QuantityBE.GetInt() + Quantity.GetInt() + QuantityLong.GetInt();
+        newOrder.OCOGroup1Quantity = QuantityBE.GetInt();
+        newOrder.OCOGroup2Quantity = Quantity.GetInt();
+        newOrder.OCOGroup3Quantity = QuantityLong.GetInt();
+
+        newOrder.Stop1Price = StopLossPrice[i] - sc.TickSize;
+        newOrder.Stop2Price = StopLossPrice[i] - sc.TickSize;
+        newOrder.Stop3Price = StopLossPrice[i] - sc.TickSize;
+
+        newOrder.Target1Offset = TargetFirstInTicks[i] * sc.TickSize;
+        newOrder.Target2Offset = TargetFirstInTicks[i] * sc.TickSize * 2;
+        newOrder.Target3Offset = MaxTargetInTicksForLongPos.GetFloat() * sc.TickSize;
+
+        newOrder.AttachedOrderStop1Type = SCT_ORDERTYPE_STOP;
+        newOrder.AttachedOrderStop2Type = SCT_ORDERTYPE_STOP;
+        newOrder.AttachedOrderStop3Type = SCT_ORDERTYPE_STOP;
+
+        newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_MARKET_IF_TOUCHED;
+        newOrder.AttachedOrderTarget2Type = SCT_ORDERTYPE_MARKET_IF_TOUCHED;
+        newOrder.AttachedOrderTarget3Type = SCT_ORDERTYPE_MARKET_IF_TOUCHED;
+
+        newOrder.MoveToBreakEven.Type = MOVETO_BE_ACTION_TYPE_OFFSET_TRIGGERED;
+        newOrder.MoveToBreakEven.BreakEvenLevelOffsetInTicks = 10;
+        newOrder.MoveToBreakEven.TriggerOffsetInTicks = 25;
 
         if (const double orderPlaced = sc.BuyEntry(newOrder); orderPlaced > 0) {
             barOderPlaced = i;
