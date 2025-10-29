@@ -85,6 +85,8 @@ SCSFExport scsf_EndOfNStreaksSignal(SCStudyInterfaceRef sc) {
     SCInputRef NumberBarsStudy = sc.Input[1];
     SCInputRef NStreak = sc.Input[2];
     SCInputRef StopLossBufferInTicks = sc.Input[3];
+    SCInputRef MinDeltaVol = sc.Input[4];
+
 
 
     SCSubgraphRef TradeSignal = sc.Subgraph[0];
@@ -110,17 +112,21 @@ SCSFExport scsf_EndOfNStreaksSignal(SCStudyInterfaceRef sc) {
 
         StopLossBufferInTicks.Name = "Stop loss buffer in ticks";
         StopLossBufferInTicks.SetIntLimits(0, 200);
-        StopLossBufferInTicks.SetInt(0);
+        StopLossBufferInTicks.SetInt(1);
+
+        MinDeltaVol.Name = "Minimum delta volume for signal";
+        MinDeltaVol.SetIntLimits(0, 200);
+        MinDeltaVol.SetInt(100);
 
         // Outputs
         TradeSignal.Name = "Trade signal";
-        TradeSignal.DrawStyle = DRAWSTYLE_IGNORE;
+        TradeSignal.DrawStyle = DRAWSTYLE_HIDDEN;
 
         StopLossPrice.Name = "Stop loss price";
-        StopLossPrice.DrawStyle = DRAWSTYLE_IGNORE;
+        StopLossPrice.DrawStyle = DRAWSTYLE_HIDDEN;
 
         FirstTargetInTicks.Name = "First target in ticks";
-        FirstTargetInTicks.DrawStyle = DRAWSTYLE_IGNORE;
+        FirstTargetInTicks.DrawStyle = DRAWSTYLE_HIDDEN;
 
     }
     const int i = sc.Index;
@@ -142,23 +148,19 @@ SCSFExport scsf_EndOfNStreaksSignal(SCStudyInterfaceRef sc) {
 
     if (StreakLength[i] >= NStreak.GetFloat()) {
 
-        if (AskVBidV[i] > 0 && StreakDirection[i] < 0 && sc.Close[i] > sc.High[i-1]) {
+        if (AskVBidV[i] > MinDeltaVol.GetFloat() && StreakDirection[i] < 0 && sc.Close[i] > sc.High[i-1]) {
             TradeSignal[i] = 1;
-            stopLossPrice = std::min<float>(StreakLow[i-1], sc.Low[i]);
-            StopLossPrice[i] = stopLossPrice - sc.TickSize * StopLossBufferInTicks.GetFloat();
-            if (FirstTargetInTicks[i] == 0) {
-                targetInTicks = (sc.Close[i] - sc.Low[i-1]) / sc.TickSize;
-            }
+            stopLossPrice = std::min<float>(StreakLow[i-1], sc.Low[i]) - sc.TickSize * StopLossBufferInTicks.GetFloat();
+            targetInTicks = (sc.High[i-1] - sc.Low[i-1]) / sc.TickSize + 1;
         }
-        if (AskVBidV[i] < 0 && StreakDirection[i] > 0 && sc.Close[i] < sc.Low[i-1]) {
+        if (AskVBidV[i] < MinDeltaVol.GetFloat()  && StreakDirection[i] > 0 && sc.Close[i] < sc.Low[i-1]) {
             TradeSignal[i] = -1;
-            stopLossPrice = std::max<float>(StreakHigh[i-1], sc.High[i]);
-            StopLossPrice[i] = stopLossPrice + sc.TickSize * StopLossBufferInTicks.GetFloat();
-            if (FirstTargetInTicks[i] == 0) {
-                targetInTicks = (sc.High[i-1] - sc.Close[i]) / sc.TickSize;
-            }
+            stopLossPrice = std::max<float>(StreakHigh[i-1], sc.High[i]) + sc.TickSize * StopLossBufferInTicks.GetFloat();
+            // StopLossPrice[i] = stopLossPrice ;
+            targetInTicks = (sc.High[i-1] - sc.Low[i-1]) / sc.TickSize + 1;
         }
     }
+    StopLossPrice[i] = stopLossPrice;
 
     FirstTargetInTicks[i] = targetInTicks;
 }
