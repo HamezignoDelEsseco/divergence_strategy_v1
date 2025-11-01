@@ -1,6 +1,44 @@
 #include "helpers.h"
 #include "sierrachart.h"
 
+SCSFExport scsf_VVAZoneId(SCStudyInterfaceRef sc) {
+
+    SCInputRef VVAStudy = sc.Input[0];
+
+    SCSubgraphRef ZoneID = sc.Subgraph[0];
+    //SCSubgraphRef ContradictingIdx = sc.Subgraph[4];
+
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+
+        sc.GraphName = "VVA Zone ID";
+
+        VVAStudy.Name = "VVA ZoneID";
+        VVAStudy.SetStudyID(6);
+
+        ZoneID.Name = "Zone ID";
+        ZoneID.DrawStyle = DRAWSTYLE_IGNORE;
+    }
+    SCFloatArray VVAH;
+    SCFloatArray VVAL;
+    sc.GetStudyArrayUsingID(VVAStudy.GetStudyID(), 1, VVAH);
+    sc.GetStudyArrayUsingID(VVAStudy.GetStudyID(), 2, VVAL);
+
+    const int i = sc.Index;
+
+    float& zoneID = sc.GetPersistentFloat(1);
+    if (sc.IsNewTradingDay(i)) {
+        zoneID = 0;
+    }
+    if (sc.CrossOver(sc.Close, VVAH, i) != NO_CROSS || sc.CrossOver(sc.Close, VVAL, i) != NO_CROSS) {
+        zoneID++;
+    }
+
+    ZoneID[i] = zoneID;
+
+}
+
 SCSFExport scsf_DeltaVolShortSignal(SCStudyInterfaceRef sc) {
 
     SCInputRef NumPreceedingPosBars = sc.Input[0];
@@ -140,8 +178,6 @@ SCSFExport scsf_DeltaVolLongShortSignal(SCStudyInterfaceRef sc) {
         TradeSignal.Name = "Enter short signal";
         TradeSignal.DrawStyle = DRAWSTYLE_IGNORE;
 
-        Stop.Name = "Stop loss price";
-        Stop.DrawStyle = DRAWSTYLE_IGNORE;
 
         TargetFirst.Name = "Target first (in ticks)";
         TargetFirst.DrawStyle = DRAWSTYLE_IGNORE;
@@ -209,10 +245,6 @@ SCSFExport scsf_DeltaVolLongShortSignal(SCStudyInterfaceRef sc) {
     // The reversal condition is an IMMEDIATE switch
     const bool reverseToShort = TradeSignal[i] == 1 && AskVBidV[i] < 0 && sc.Close[i] - sc.TickSize <= sc.Low[i-1];
     const bool reverseToLong = TradeSignal[i] == -1 && AskVBidV[i] > 0 && sc.Close[i] + sc.TickSize >= sc.High[i-1];
-
-    if (TradeSignal[i-2] == 1) {
-        const bool iAmHere = true;
-    }
 
     if (reverseToLong) {
         Reversal[i] = 1;
