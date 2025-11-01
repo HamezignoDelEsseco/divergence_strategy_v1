@@ -171,7 +171,7 @@ SCSFExport scsf_ScalperTrader(SCStudyInterfaceRef sc) {
 
     }
 
-    if (AskVBidV[i-1] < 0 &&  PositionData.PositionQuantity > 0h) {
+    if (AskVBidV[i-1] < 0 &&  PositionData.PositionQuantity > 0) {
         sc.FlattenAndCancelAllOrders();
         flattenBar = i;
         return;
