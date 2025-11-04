@@ -52,3 +52,10 @@ bool isNewTradingDayRange(SCStudyInterfaceRef sc, int range, int Ix);
 int isInsideTrade(SCStudyInterfaceRef sc);
 
 int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder);
+
+// Trendline fitting helper functions
+void linearRegressionHelper(SCStudyInterfaceRef sc, int nBars, int index, double& slope, double& intercept);
+
+void fitTrendlinesHelper(SCStudyInterfaceRef sc, int nBars, int index,
+                        double& supportSlope, double& supportIntercept,
+                        double& resistSlope, double& resistIntercept);

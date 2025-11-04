@@ -194,3 +194,87 @@ void highestLowestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int ind
     lowest = low;
     highest = high;
 }
+
+// Trendline fitting helper: Linear regression using least squares
+void linearRegressionHelper(SCStudyInterfaceRef sc, const int nBars, const int index, double& slope, double& intercept) {
+    if (index < nBars - 1 || nBars <= 0) {
+        slope = 0;
+        intercept = 0;
+        return;
+    }
+
+    double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    const int n = nBars;
+
+    for (int i = 0; i < n; i++) {
+        const double x = static_cast<double>(i);
+        const double y = sc.Close[index - (n - 1) + i];
+
+        sumX += x;
+        sumY += y;
+        sumXY += x * y;
+        sumX2 += x * x;
+    }
+
+    const double denom = n * sumX2 - sumX * sumX;
+    if (std::abs(denom) > 1e-10) {
+        slope = (n * sumXY - sumX * sumY) / denom;
+        intercept = (sumY - slope * sumX) / n;
+    } else {
+        slope = 0;
+        intercept = sumY / n;
+    }
+}
+
+// Trendline fitting helper: Fit support and resistance trendlines
+void fitTrendlinesHelper(SCStudyInterfaceRef sc, const int nBars, const int index,
+                        double& supportSlope, double& supportIntercept,
+                        double& resistSlope, double& resistIntercept) {
+    if (index < nBars - 1) {
+        supportSlope = 0;
+        supportIntercept = 0;
+        resistSlope = 0;
+        resistIntercept = 0;
+        return;
+    }
+
+    // Step 1: Find line of best fit using close prices
+    double initSlope, initIntercept;
+    linearRegressionHelper(sc, nBars, index, initSlope, initIntercept);
+
+    // Step 2: Find upper and lower pivot points
+    const int startIdx = index - nBars + 1;
+    int upperPivot = startIdx;
+    int lowerPivot = startIdx;
+    double maxDeviation = -1e10;
+    double minDeviation = 1e10;
+
+    for (int i = 0; i < nBars; i++) {
+        const int barIdx = startIdx + i;
+        const double lineVal = initSlope * i + initIntercept;
+
+        // Check high prices for resistance pivot
+        const double highDeviation = sc.High[barIdx] - lineVal;
+        if (highDeviation > maxDeviation) {
+            maxDeviation = highDeviation;
+            upperPivot = barIdx;
+        }
+
+        // Check low prices for support pivot
+        const double lowDeviation = sc.Low[barIdx] - lineVal;
+        if (lowDeviation < minDeviation) {
+            minDeviation = lowDeviation;
+            lowerPivot = barIdx;
+        }
+    }
+
+    // Step 3: Calculate support line through lower pivot
+    const int supportPivotOffset = lowerPivot - startIdx;
+    supportSlope = initSlope;
+    supportIntercept = -supportSlope * supportPivotOffset + sc.Low[lowerPivot];
+
+    // Step 4: Calculate resistance line through upper pivot
+    const int resistPivotOffset = upperPivot - startIdx;
+    resistSlope = initSlope;
+    resistIntercept = -resistSlope * resistPivotOffset + sc.High[upperPivot];
+}

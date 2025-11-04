@@ -87,8 +87,6 @@ SCSFExport scsf_EndOfNStreaksSignal(SCStudyInterfaceRef sc) {
     SCInputRef StopLossBufferInTicks = sc.Input[3];
     SCInputRef MinDeltaVol = sc.Input[4];
 
-
-
     SCSubgraphRef TradeSignal = sc.Subgraph[0];
     SCSubgraphRef StopLossPrice = sc.Subgraph[1];
     SCSubgraphRef FirstTargetInTicks = sc.Subgraph[2];
@@ -161,7 +159,6 @@ SCSFExport scsf_EndOfNStreaksSignal(SCStudyInterfaceRef sc) {
         }
     }
     StopLossPrice[i] = stopLossPrice;
-
     FirstTargetInTicks[i] = targetInTicks;
 }
 
@@ -249,3 +246,8 @@ SCSFExport scsf_FollowTheStreakSignal(SCStudyInterfaceRef sc) {
 
     FirstTargetInTicks[i] = targetInTicks;
 }
+
+
+
+
+//sc.linear
