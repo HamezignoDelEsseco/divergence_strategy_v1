@@ -13,7 +13,7 @@
 #include "helpers.h"
 #include "sierrachart.h"
 
-SCDLLName("DELTA VOLUME TRADING")
+SCDLLName("ALEX STUDIES")
 
 SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
     /*
@@ -86,7 +86,6 @@ SCSFExport scsf_StrategyBasicFlagDraft(SCStudyInterfaceRef sc) {
         if (IsCleanTick(priceOfInterest, sc)) {
             TradeSignal[sc.Index] = 1;
         }
-
     }
 }
 
