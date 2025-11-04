@@ -26,6 +26,7 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
         VVASignals.cpp
         FollowTheStreak.cpp
         TrendAndEOSSignal.cpp
+        BigBarScalping.cpp
 )
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES

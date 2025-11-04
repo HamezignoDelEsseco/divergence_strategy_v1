@@ -212,3 +212,4 @@ SCSFExport scsf_SwingTrader(SCStudyInterfaceRef sc) {
         sc.SellOrder(NewOrder);
     }
 }
+
