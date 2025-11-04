@@ -364,3 +364,7 @@ SCSFExport scsf_TrendlineBreakoutTraderShort(SCStudyInterfaceRef sc) {
         }
     }
 }
+
+
+
+
