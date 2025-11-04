@@ -114,6 +114,14 @@ bool lowestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
     return target == nBars;
 }
 
+bool lowestOfNBarsWithBuffer(SCStudyInterfaceRef sc, const int nBars, const int index, const float buffer) {
+    int target = 0;
+    for (int i = 0; i < nBars; i++) {
+        target += sc.Low[index] - buffer <= sc.Low[index - i] ? 1 : 0;
+    }
+    return target == nBars;
+}
+
 
 bool isNewTradingDayRange(SCStudyInterfaceRef sc, int range, int Ix) {
     int result = 0;
@@ -130,6 +138,14 @@ bool highestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int index) {
     int target = 0;
     for (int i = 0; i < nBars; i++) {
         target += sc.High[index] >= sc.High[index - i] ? 1 : 0;
+    }
+    return target == nBars;
+}
+
+bool highestOfNBarsWithBuffer(SCStudyInterfaceRef sc, const int nBars, const int index, const float buffer) {
+    int target = 0;
+    for (int i = 0; i < nBars; i++) {
+        target += sc.High[index] + buffer >= sc.High[index - i] ? 1 : 0;
     }
     return target == nBars;
 }
@@ -193,4 +209,28 @@ void highestLowestOfNBars(SCStudyInterfaceRef sc, const int nBars, const int ind
     }
     lowest = low;
     highest = high;
+}
+
+bool higherHighsHigherLows(SCStudyInterfaceRef sc, const int idx, const int nBars) {
+    int res = 0;
+    for (int i = 0; i < nBars; i++) {
+        res += sc.High[idx] > sc.High[idx - 1] ? 1 : 0;
+        res += sc.Low[idx] > sc.Low[idx - 1] ? 1 : 0;
+    }
+
+    return res == 2 * nBars;
+}
+
+float higherHighsLowerLows(SCStudyInterfaceRef sc, const int idx, const int nBars) {
+    float resH = 0;
+    float resL = 0;
+    for (int i = 0; i < nBars - 1; i++) {
+        resH += sc.High[idx - i] > sc.High[idx - (i+1)] ? 1 : 0;
+        //resH += sc.Low[idx - i] > sc.Low[idx - (i+1)] ? 1 : 0;
+
+        resL += sc.Low[idx - i] < sc.Low[idx - (i+1)] ? 1 : 0;
+        //resL += sc.High[idx - i] < sc.High[idx - (i+1)] ? 1 : 0;
+    }
+
+    return resH == 1 * (nBars-1) ? 1 : resL == 1 * (nBars-1) ? -1 : 0;
 }

@@ -41,7 +41,11 @@ void flattenAllAfterCash(SCStudyInterfaceRef sc);
 
 bool lowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
 
+bool lowestOfNBarsWithBuffer(SCStudyInterfaceRef sc, int nBars, int index, float buffer);
+
 bool highestOfNBars(SCStudyInterfaceRef sc, int nBars, int index);
+
+bool highestOfNBarsWithBuffer(SCStudyInterfaceRef sc, int nBars, int index, float buffer);
 
 void highestLowestOfNBars(SCStudyInterfaceRef sc, int nBars, int index, double& lowest, double &highest);
 
@@ -52,3 +56,7 @@ bool isNewTradingDayRange(SCStudyInterfaceRef sc, int range, int Ix);
 int isInsideTrade(SCStudyInterfaceRef sc);
 
 int workingParentOrder(SCStudyInterfaceRef sc, uint32_t &workingParentOrder);
+
+bool higherHighsHigherLows(SCStudyInterfaceRef sc, int idx, int nBars);
+
+float higherHighsLowerLows(SCStudyInterfaceRef sc, int idx, int nBars);
