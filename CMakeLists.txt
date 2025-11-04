@@ -24,7 +24,9 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
         EndOfStreakTrader.cpp
         ScalperTrader.cpp
         VVASignals.cpp
-        FollowTheStreak.cpp)
+        FollowTheStreak.cpp
+        TrendAndEOSSignal.cpp
+)
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "D:\\SierraChartCME\\Data" OUTPUT_NAME "deltaVolStudies"
