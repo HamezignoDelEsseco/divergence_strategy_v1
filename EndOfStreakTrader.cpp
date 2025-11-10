@@ -453,42 +453,35 @@ SCSFExport scsf_EndOfStreakTraderLagLongShort(SCStudyInterfaceRef sc) {
 SCSFExport scsf_ColorBreaksColorTraderShortWithReversal(SCStudyInterfaceRef sc) {
     // THIS IS STILL WIP
 
-    SCInputRef CBCSignal = sc.Input[0];
-    SCInputRef CBCStopLoss = sc.Input[1];
-    SCInputRef CBCReversalSignal = sc.Input[2];
-    SCInputRef CBCReversalStopLoss = sc.Input[3];
+    SCInputRef CBCStudy = sc.Input[0];
+    SCInputRef ATRStudy = sc.Input[2];
+    SCInputRef AllowContractStacking = sc.Input[3];
     SCInputRef AllowReversals = sc.Input[4];
-
-
-    SCInputRef MaxTarget = sc.Input[3];
-    SCInputRef EndTradingTime = sc.Input[4];
-    SCInputRef StartTradingTime = sc.Input[5];
-
-    SCInputRef MaxDailyPLInTicks = sc.Input[5];
-    SCInputRef MinDailyPLInTicks = sc.Input[6];
-    SCInputRef MarketIfTouched = sc.Input[6];
+    SCInputRef MaxTarget = sc.Input[6];
+    SCInputRef EndTradingTime = sc.Input[7];
+    SCInputRef StartTradingTime = sc.Input[8];
+    SCInputRef MaxDailyPLInTicks = sc.Input[9];
+    SCInputRef MinDailyPLInTicks = sc.Input[10];
+    SCInputRef MarketIfTouched = sc.Input[11];
 
 
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
 
-        sc.GraphName = "CBC trader with reversal (short)";
+        sc.GraphName = "CBC trader with reversal (short+long)";
 
         // Inputs
-        CBCSignal.Name = "CBC signal";
-        CBCSignal.SetStudySubgraphValues(2,0);
+        CBCStudy.Name = "CBC study";
+        CBCStudy.SetStudyID(2);
 
-        CBCStopLoss.Name = "CBC stop loss";
-        CBCStopLoss.SetStudySubgraphValues(2,1);
+        ATRStudy.Name = "ATR study";
+        ATRStudy.SetStudyID(9);
 
-        CBCReversalSignal.Name = "CBC reversal signal";
-        CBCReversalSignal.SetStudySubgraphValues(2,2);
-
-        CBCReversalStopLoss.Name = "CBC reversal stop loss";
-        CBCReversalStopLoss.SetStudySubgraphValues(2,3);
+        AllowContractStacking.Name = "Allow contract staking";
+        AllowContractStacking.SetYesNo(1);
 
         AllowReversals.Name = "Allow reversals";
-        AllowReversals.SetYesNo(0);
+        AllowReversals.SetYesNo(1);
 
         MaxTarget.Name = "Max. target";
         MaxTarget.SetIntLimits(15, 200);
@@ -516,11 +509,11 @@ SCSFExport scsf_ColorBreaksColorTraderShortWithReversal(SCStudyInterfaceRef sc) 
         sc.SupportReversals = true;
         sc.AllowOnlyOneTradePerBar = true;
 
-        sc.MaximumPositionAllowed = 3;
+        sc.MaximumPositionAllowed = 1;
 
         sc.MaintainTradeStatisticsAndTradesData = true;
         sc.AllowMultipleEntriesInSameDirection = true;
-        sc.AllowEntryWithWorkingOrders = true;
+        sc.AllowEntryWithWorkingOrders = false;
     }
 
     if (sc.LastCallToFunction)
@@ -533,7 +526,6 @@ SCSFExport scsf_ColorBreaksColorTraderShortWithReversal(SCStudyInterfaceRef sc) 
         return;
 
     const int i = sc.Index;
-    double estimatedEntryPrice;
     int& messagePrinted = sc.GetPersistentInt(2);
 
     s_SCPositionData PositionData;
@@ -560,24 +552,29 @@ SCSFExport scsf_ColorBreaksColorTraderShortWithReversal(SCStudyInterfaceRef sc) 
         }
 
     SCFloatArray TradeSignal;
+    SCFloatArray Reversal;
     SCFloatArray StopLoss;
-    SCFloatArray ReversalTradeSignal;
-    SCFloatArray ReversalStopLoss;
-    sc.GetStudyArrayUsingID(CBCSignal.GetStudyID(), CBCSignal.GetSubgraphIndex(), TradeSignal);
-    sc.GetStudyArrayUsingID(CBCStopLoss.GetStudyID(), CBCStopLoss.GetSubgraphIndex(), StopLoss);
-    sc.GetStudyArrayUsingID(CBCReversalSignal.GetStudyID(), CBCSignal.GetSubgraphIndex(), ReversalTradeSignal);
-    sc.GetStudyArrayUsingID(CBCReversalStopLoss.GetStudyID(), CBCStopLoss.GetSubgraphIndex(), ReversalStopLoss);
+    SCFloatArray ATR;
+    sc.GetStudyArrayUsingID(CBCStudy.GetStudyID(), 0, TradeSignal);
+    sc.GetStudyArrayUsingID(CBCStudy.GetStudyID(), 1, StopLoss);
+    sc.GetStudyArrayUsingID(CBCStudy.GetStudyID(), 2, Reversal);
+    sc.GetStudyArrayUsingID(ATRStudy.GetStudyID(), 0, ATR);
+
 
     if (AllowReversals.GetYesNo() == 1) {
-        if (ReversalTradeSignal[i] == -1 && PositionData.PositionQuantity < 0) { // Only revert if there's still a live order
-            s_SCNewOrder newOrder;
-            newOrder.OrderQuantity = 1;
-            newOrder.TimeInForce = SCT_TIF_DAY;
-            newOrder.OrderType = SCT_ORDERTYPE_MARKET;
-            newOrder.Stop1Price = ReversalStopLoss[i];
-            newOrder.Target1Offset = MaxTarget.GetFloat();
-            newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP;
-            newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_STOP_LIMIT;
+        s_SCNewOrder newOrder;
+        newOrder.OrderQuantity = 1;
+        newOrder.TimeInForce = SCT_TIF_DAY;
+        newOrder.OrderType = SCT_ORDERTYPE_MARKET;
+        newOrder.Stop1Price = StopLoss[i];
+        newOrder.Target1Offset = ATR[i];
+        newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP;
+        newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_STOP_LIMIT;
+        if (Reversal[i] == -1) { // Only revert if there's still a live order
+            sc.SellOrder(newOrder);
+        }
+
+        if (Reversal[i] == 1) { // Only revert if there's still a live order
             sc.BuyOrder(newOrder);
         }
     }
@@ -588,10 +585,22 @@ SCSFExport scsf_ColorBreaksColorTraderShortWithReversal(SCStudyInterfaceRef sc) 
         newOrder.TimeInForce = SCT_TIF_DAY;
         newOrder.OrderType = SCT_ORDERTYPE_MARKET;
         newOrder.Stop1Price = StopLoss[i];
-        newOrder.Target1Offset = MaxTarget.GetFloat();
+        newOrder.Target1Offset = ATR[i];
         newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP;
         newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_STOP_LIMIT;
         sc.SellOrder(newOrder);
+    }
+
+    if (TradeSignal[i] == 1 && PositionData.PositionQuantity >= 0) {
+        s_SCNewOrder newOrder;
+        newOrder.OrderQuantity = 1;
+        newOrder.TimeInForce = SCT_TIF_DAY;
+        newOrder.OrderType = SCT_ORDERTYPE_MARKET;
+        newOrder.Stop1Price = StopLoss[i];
+        newOrder.Target1Offset =  ATR[i];
+        newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP;
+        newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_STOP_LIMIT;
+        sc.BuyOrder(newOrder);
     }
 
     if (PositionData.OpenProfitLoss / sc.CurrencyValuePerTick >= 105) {
