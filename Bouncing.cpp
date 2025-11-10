@@ -368,25 +368,31 @@ SCSFExport scsf_VVALevelIndicator(SCStudyInterfaceRef sc) {
     lastProcessedIDx = currIdx;
 }
 
-SCSFExport scsf_VWAPBouncer(SCStudyInterfaceRef sc) {
+SCSFExport scsf_VVABouncer(SCStudyInterfaceRef sc) {
     // This study outputs whether the price is bouncing on a signal, either from above or from below
 
-    SCInputRef VWAPIndicator = sc.Input[0];
-    SCInputRef OneSignalPerZone = sc.Input[1];
-    SCInputRef SignalHitOffsetInTicks = sc.Input[2];
-    SCInputRef StopLossOffsetInTicks = sc.Input[3];
+    SCInputRef VVALevelsIndicator = sc.Input[0];
+    SCInputRef NBStudy = sc.Input[1];
+
+    SCInputRef OneSignalPerZone = sc.Input[2];
+    SCInputRef SignalHitOffsetInTicks = sc.Input[3];
+    SCInputRef StopLossOffsetInTicks = sc.Input[4];
+    SCInputRef MaxRiskInTicks = sc.Input[5];
 
     SCSubgraphRef SignalDirection = sc.Subgraph[0];
-    SCSubgraphRef SignalLocation = sc.Subgraph[1];
-    SCSubgraphRef StopLoss = sc.Subgraph[2];
+    SCSubgraphRef StopLoss = sc.Subgraph[1];
+    SCSubgraphRef FirstTargetInTicks = sc.Subgraph[2];
 
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
 
-        sc.GraphName = "VWAP Bouncer";
+        sc.GraphName = "VVA Bouncer";
 
-        VWAPIndicator.Name = "VWAP indicator";
-        VWAPIndicator.SetStudyID(6);
+        VVALevelsIndicator.Name = "VWAP indicator";
+        VVALevelsIndicator.SetStudyID(6);
+
+        NBStudy.Name = "Number bars study";
+        NBStudy.SetStudyID(1);
 
         OneSignalPerZone.Name = "One signal per zone";
         OneSignalPerZone.SetYesNo(1);
@@ -399,7 +405,132 @@ SCSFExport scsf_VWAPBouncer(SCStudyInterfaceRef sc) {
         StopLossOffsetInTicks.SetIntLimits(0, 50);
         StopLossOffsetInTicks.SetInt(0);
 
+        MaxRiskInTicks.Name = "Maximum risk (in ticks)";
+        MaxRiskInTicks.SetIntLimits(0, 50);
+        MaxRiskInTicks.SetInt(10);
+
+        // Outputs
         SignalDirection.Name = "Signal direction";
+        SignalDirection.DrawStyle = DRAWSTYLE_HIDDEN;
+
+        StopLoss.Name = "Stop loss price";
+        StopLoss.DrawStyle = DRAWSTYLE_LINE;
+        StopLoss.PrimaryColor = RGB(0, 128, 128);
+
+        FirstTargetInTicks.Name = "First target (in ticks)";
+        FirstTargetInTicks.DrawStyle = DRAWSTYLE_HIDDEN;
+
+        sc.GraphRegion = 0;
+        sc.ScaleRangeType = SCALE_SAMEASREGION;
+
+    }
+    const int currIdx = sc.Index;
+    const int prevIdx = currIdx - 1;
+    float& stopLoss = sc.GetPersistentFloat(1);
+    float& stopLossInTicks = sc.GetPersistentFloat(2);
+
+
+    SCFloatArray Support;
+    SCFloatArray Resistance;
+    SCFloatArray ZoneID;
+    SCFloatArray AskVolBidVolDiff;
+    sc.GetStudyArrayUsingID(NBStudy.GetStudyID(), 0, AskVolBidVolDiff);
+
+    sc.GetStudyArrayUsingID(VVALevelsIndicator.GetStudyID(), 2, Resistance);
+    sc.GetStudyArrayUsingID(VVALevelsIndicator.GetStudyID(), 3, Support);
+    sc.GetStudyArrayUsingID(VVALevelsIndicator.GetStudyID(), 4, ZoneID);
+
+    const float highBarTouches = sc.High[currIdx - 2] + SignalHitOffsetInTicks.GetFloat() * sc.TickSize;
+    const float lowBarTouches = sc.Low[currIdx - 2] - SignalHitOffsetInTicks.GetFloat() * sc.TickSize;
+
+    const bool sameZone = ZoneID[currIdx - 2] == ZoneID[currIdx - 1] && ZoneID[prevIdx] == ZoneID[currIdx];
+    const bool touchesResistance = highBarTouches >= Resistance[currIdx-2] && lowBarTouches <= Resistance[currIdx-2];
+    const bool touchesSupport = highBarTouches >= Support[currIdx-2] && lowBarTouches <= Support[currIdx-2];
+
+    bool volCondition;
+    bool uptickCondition;
+    bool closeCondition;
+
+    StopLoss[currIdx] = stopLoss;
+    FirstTargetInTicks[currIdx] = stopLossInTicks;
+
+
+    if (!sameZone){return;}
+    if (!touchesResistance && !touchesSupport){return;}
+
+    if (touchesResistance) {
+        volCondition = AskVolBidVolDiff[currIdx - 2] > 0 && AskVolBidVolDiff[prevIdx] < 0;
+        closeCondition = sc.Close[prevIdx] < Resistance[prevIdx];
+        uptickCondition = sc.Close[currIdx] < sc.Close[prevIdx];
+        if (volCondition && uptickCondition && closeCondition) {
+            SignalDirection[currIdx] = -1;
+            stopLoss = sc.High[prevIdx] + StopLossOffsetInTicks.GetFloat() * sc.TickSize;
+            stopLossInTicks = (stopLoss - (sc.Close[prevIdx] - sc.TickSize)) / sc.TickSize;
+            if (stopLossInTicks > MaxRiskInTicks.GetFloat()) {
+                SignalDirection[currIdx] = 0;
+            }
+        }
+    } else {
+        volCondition = AskVolBidVolDiff[currIdx - 2] < 0 && AskVolBidVolDiff[prevIdx] > 0;
+        closeCondition = sc.Close[prevIdx] > Support[prevIdx];
+        uptickCondition = sc.Close[currIdx] > sc.Close[prevIdx];
+        if (volCondition && uptickCondition && closeCondition) {
+            SignalDirection[currIdx] = 1;
+            stopLoss = sc.Low[prevIdx] - StopLossOffsetInTicks.GetFloat() * sc.TickSize;
+            stopLossInTicks = (sc.Close[prevIdx] + sc.TickSize - stopLoss) / sc.TickSize;
+            if (stopLossInTicks > MaxRiskInTicks.GetFloat()) {
+                SignalDirection[currIdx] = 0;
+            }
+        }
+    }
+
+
+}
+
+SCSFExport scsf_TrampolineTrader(SCStudyInterfaceRef sc) {
+    // THIS IS STILL WIP
+
+    SCInputRef VVALevelsIndicator = sc.Input[0];
+    SCInputRef NBStudy = sc.Input[1];
+
+    SCInputRef OneSignalPerZone = sc.Input[2];
+    SCInputRef SignalHitOffsetInTicks = sc.Input[3];
+    SCInputRef StopLossOffsetInTicks = sc.Input[4];
+    SCInputRef MaxRiskInTicks = sc.Input[5];
+
+
+    SCSubgraphRef SignalDirection = sc.Subgraph[0];
+    SCSubgraphRef SignalLocation = sc.Subgraph[1];
+    SCSubgraphRef StopLoss = sc.Subgraph[2];
+
+    if (sc.SetDefaults) {
+        sc.AutoLoop = 1;
+
+        sc.GraphName = "VVA Bouncer";
+
+        VVALevelsIndicator.Name = "VWAP indicator";
+        VVALevelsIndicator.SetStudyID(6);
+
+        NBStudy.Name = "Number bars study";
+        NBStudy.SetStudyID(1);
+
+        OneSignalPerZone.Name = "One signal per zone";
+        OneSignalPerZone.SetYesNo(1);
+
+        SignalHitOffsetInTicks.Name = "Signal hit offset (in ticks)";
+        SignalHitOffsetInTicks.SetIntLimits(0, 50);
+        SignalHitOffsetInTicks.SetInt(0);
+
+        StopLossOffsetInTicks.Name = "Stop loss offset (in ticks)";
+        StopLossOffsetInTicks.SetIntLimits(0, 50);
+        StopLossOffsetInTicks.SetInt(0);
+
+        MaxRiskInTicks.Name = "Maximum risk (in ticks)";
+        MaxRiskInTicks.SetIntLimits(0, 50);
+        MaxRiskInTicks.SetInt(0);
+
+        SignalDirection.Name = "Signal direction";
+        SignalDirection.DrawStyle = DRAWSTYLE_BAR;
         SignalLocation.Name = "Signal location";
         StopLoss.Name = "Stop loss price";
 
@@ -408,5 +539,48 @@ SCSFExport scsf_VWAPBouncer(SCStudyInterfaceRef sc) {
     }
     const int currIdx = sc.Index;
     const int prevIdx = currIdx - 1;
+    float& stopLoss = sc.GetPersistentFloat(1);
+
+    SCFloatArray Support;
+    SCFloatArray Resistance;
+    SCFloatArray ZoneID;
+    SCFloatArray AskVolBidVolDiff;
+    sc.GetStudyArrayUsingID(NBStudy.GetStudyID(), 0, AskVolBidVolDiff);
+
+    sc.GetStudyArrayUsingID(VVALevelsIndicator.GetStudyID(), 2, Resistance);
+    sc.GetStudyArrayUsingID(VVALevelsIndicator.GetStudyID(), 3, Support);
+    sc.GetStudyArrayUsingID(VVALevelsIndicator.GetStudyID(), 4, ZoneID);
+
+    const float highBarTouches = sc.High[currIdx - 2] + SignalHitOffsetInTicks.GetFloat() * sc.TickSize;
+    const float lowBarTouches = sc.Low[currIdx - 2] - SignalHitOffsetInTicks.GetFloat() * sc.TickSize;
+
+    const bool sameZone = ZoneID[currIdx - 2] == ZoneID[currIdx - 1] && ZoneID[prevIdx] == ZoneID[currIdx];
+    const bool touchesResistance = highBarTouches >= Resistance[currIdx-2] && lowBarTouches <= Resistance[currIdx-2];
+    const bool touchesSupport = highBarTouches >= Support[currIdx-2] && lowBarTouches <= Support[currIdx-2];
+
+    bool volCondition;
+    bool uptickCondition;
+    bool closeCondition;
+    if (!sameZone){return;}
+    if (!touchesResistance && !touchesSupport){return;}
+
+    if (touchesResistance) {
+        volCondition = AskVolBidVolDiff[currIdx - 2] > 0 && AskVolBidVolDiff[prevIdx] < 0;
+        closeCondition = sc.Close[prevIdx] < Resistance[prevIdx];
+        uptickCondition = sc.Close[currIdx] < sc.Close[prevIdx];
+        if (volCondition && uptickCondition && closeCondition) {
+            SignalDirection[currIdx] = -1;
+            stopLoss = sc.High[prevIdx];
+        }
+    } else {
+        volCondition = AskVolBidVolDiff[currIdx - 2] < 0 && AskVolBidVolDiff[prevIdx] > 0;
+        closeCondition = sc.Close[prevIdx] > Support[prevIdx];
+        uptickCondition = sc.Close[currIdx] > sc.Close[prevIdx];
+        if (volCondition && uptickCondition && closeCondition) {
+            SignalDirection[currIdx] = 1;
+            stopLoss = sc.Low[prevIdx];
+
+        }
+    }
 
 }

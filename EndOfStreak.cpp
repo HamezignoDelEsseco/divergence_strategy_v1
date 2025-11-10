@@ -276,10 +276,13 @@ SCSFExport scsf_ColorBreaksColor(SCStudyInterfaceRef sc) {
     SCInputRef LocalOptBars = sc.Input[2];
     SCInputRef LocalOptOffsetInTicks = sc.Input[3];
     SCInputRef RiskTickOffset = sc.Input[4];
-
+    SCInputRef MaximumRisk = sc.Input[5];
+    SCInputRef AdjustMaxStopForAllTrades = sc.Input[6];
 
     SCSubgraphRef TradeSignal = sc.Subgraph[0];
     SCSubgraphRef StopLoss = sc.Subgraph[1];
+    SCSubgraphRef Reverse = sc.Subgraph[2];
+    SCSubgraphRef StopLossReversal = sc.Subgraph[3];
 
 
     if (sc.SetDefaults) {
@@ -293,6 +296,9 @@ SCSFExport scsf_ColorBreaksColor(SCStudyInterfaceRef sc) {
         FilterByLocalOpt.Name = "Filter by local opt";
         FilterByLocalOpt.SetYesNo(1);
 
+        // UseCleanTicksCondition.Name = "Use clean tick condition";
+        // UseCleanTicksCondition.SetYesNo(0);
+
         LocalOptBars.Name = "Local opt of N bars";
         LocalOptBars.SetIntLimits(1, 100);
         LocalOptBars.SetInt(10);
@@ -305,51 +311,95 @@ SCSFExport scsf_ColorBreaksColor(SCStudyInterfaceRef sc) {
         RiskTickOffset.SetIntLimits(0, 100);
         RiskTickOffset.SetInt(5);
 
+        MaximumRisk.Name = "Max stop loss (in ticks)";
+        MaximumRisk.SetIntLimits(5, 200);
+        MaximumRisk.SetInt(50);
+
+        AdjustMaxStopForAllTrades.Name = "Adjust max stop loss for all trades";
+        AdjustMaxStopForAllTrades.SetYesNo(1);
+
         TradeSignal.Name = "Enter short signal";
-        TradeSignal.DrawStyle = DRAWSTYLE_LINE;
+        TradeSignal.DrawStyle = DRAWSTYLE_IGNORE;
 
         StopLoss.Name = "Stop loss";
         StopLoss.DrawStyle = DRAWSTYLE_LINE;
 
-        sc.GraphRegion = 1;
+        Reverse.Name = "Reverse signal";
+        Reverse.DrawStyle = DRAWSTYLE_IGNORE;
+
+        StopLossReversal.Name = "Stop loss reversal";
+        StopLossReversal.DrawStyle = DRAWSTYLE_LINE;
+
+        sc.GraphRegion = 0;
 
     }
     SCFloatArray AskVBidV;
     sc.GetStudyArrayUsingID(NumberBarsStudy.GetStudyID(), 0, AskVBidV);
     const int i = sc.Index;
-    bool localLow = true;
-    bool localHigh = true;
-
+    bool isLocalLow = true;
+    bool isLocalHigh = true;
     float& stopLoss = sc.GetPersistentFloat(1);
+    float& stopLossReversal = sc.GetPersistentFloat(2);
+    float stopLossInTicks;
+
+
+    const float highestOfN = sc.GetHighest(sc.BaseData[SC_HIGH], i-1, LocalOptBars.GetInt());
+    const float lowestOfN = sc.GetLowest(sc.BaseData[SC_LOW], i-1, LocalOptBars.GetInt());
 
     if (FilterByLocalOpt.GetYesNo() == 1) {
-        localLow = lowestOfNBarsWithBuffer(sc, LocalOptBars.GetInt(), i-2, LocalOptOffsetInTicks.GetFloat() * sc.TickSize);
-        localHigh = highestOfNBarsWithBuffer(sc, LocalOptBars.GetInt(), i-2, LocalOptOffsetInTicks.GetFloat() * sc.TickSize);
-
+        isLocalHigh = sc.High[i-1] >= highestOfN - LocalOptOffsetInTicks.GetFloat() * sc.TickSize || sc.High[i-2] >= highestOfN - LocalOptOffsetInTicks.GetFloat() * sc.TickSize;
+        isLocalLow = sc.Low[i-1] <= lowestOfN + LocalOptOffsetInTicks.GetFloat() * sc.TickSize || sc.Low[i-2] <= lowestOfN + LocalOptOffsetInTicks.GetFloat() * sc.TickSize;
     }
 
     if (
         AskVBidV[i-2] > 0 && AskVBidV[i-1] < 0
-        && (
-            (sc.Low[i] < sc.Low[i-1] && localHigh && IsCleanTick(sc.Low[i-1] - sc.TickSize, sc, 0))
-            || sc.Low[i] < (sc.Low[i-1] - sc.TickSize && localHigh)
-            )
+        && sc.Low[i] < sc.Close[i-1] && isLocalHigh
         ) {
-        TradeSignal[i] = - 1;
         stopLoss = sc.High[i-1] + RiskTickOffset.GetFloat() * sc.TickSize;
+        stopLossInTicks = (stopLoss - sc.Open[i]) / sc.TickSize;
+        TradeSignal[i] = -1;
+
+        if (stopLossInTicks > MaximumRisk.GetFloat()) {
+            if (AdjustMaxStopForAllTrades.GetYesNo() == 1) {
+                stopLoss = sc.Open[i] + MaximumRisk.GetFloat() * sc.TickSize;
+            } else {
+                TradeSignal[i] = 0;
+            }
+        }
     }
-
-
     if (
         AskVBidV[i-2] < 0  && AskVBidV[i-1] > 0
-        && (
-            (sc.High[i] > sc.High[i-1] && localLow && IsCleanTick(sc.High[i-1] + sc.TickSize, sc, 0))
-            || (sc.High[i] > sc.High[i-1] + sc.TickSize && localLow)
-            )
-        ) {
-        TradeSignal[i] = 1;
+        && sc.High[i] > sc.Close[i-1] && isLocalLow
+    ) {
         stopLoss = sc.Low[i-1] - RiskTickOffset.GetFloat() * sc.TickSize;
+        stopLossInTicks = (sc.Open[i] - stopLoss) / sc.TickSize;
+        TradeSignal[i] = 1;
+
+        if (stopLossInTicks > MaximumRisk.GetFloat()) {
+            if (AdjustMaxStopForAllTrades.GetYesNo() == 1) {
+                stopLoss = sc.Open[i] - MaximumRisk.GetFloat() * sc.TickSize;
+            } else {
+                TradeSignal[i] = 0;
+            }
+        }
     }
 
     StopLoss[i] = stopLoss;
+
+    double previousEstimatedEntry, previousEstimatedStopLossInTicks;
+    const double reversalEstimatedEntry = sc.Open[i];
+    if (TradeSignal[i-2] == 1 && sc.Low[i-1] < sc.Low[i-2] && sc.High[i-1] < sc.High[i-2] && AskVBidV[i-1] < 0) {
+        //previousEstimatedEntry = sc.High[i-3] + sc.TickSize;
+        //previousEstimatedStopLossInTicks = (previousEstimatedEntry - StopLoss[i-2]) / sc.TickSize;
+        stopLossReversal = sc.Open[i] + MaximumRisk.GetInt() * sc.TickSize;
+        Reverse[i] = -1;
+    }
+
+    if (TradeSignal[i-2] == -1 && sc.Low[i-1] > sc.Low[i-2] && sc.High[i-1] > sc.High[i-2] && AskVBidV[i-1] > 0) {
+        //previousEstimatedEntry = sc.Low[i-3] - sc.TickSize;
+        //previousEstimatedStopLossInTicks = (StopLoss[i-2] - previousEstimatedEntry) / sc.TickSize;
+        stopLossReversal = sc.Open[i] - MaximumRisk.GetInt() * sc.TickSize;
+        Reverse[i] = 1;
+    }
+    StopLossReversal[i] = stopLossReversal;
 }

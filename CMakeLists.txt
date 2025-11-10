@@ -28,6 +28,8 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
         TrendAndEOSSignal.cpp
         BigBarScalping.cpp
         Bouncing.cpp
+        VTISignal.cpp
+        VTITrader.cpp
 )
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES

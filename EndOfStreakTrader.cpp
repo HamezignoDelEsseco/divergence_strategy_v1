@@ -450,40 +450,55 @@ SCSFExport scsf_EndOfStreakTraderLagLongShort(SCStudyInterfaceRef sc) {
 
 
 
-SCSFExport scsf_ColorBreaksColorTraderShort(SCStudyInterfaceRef sc) {
+SCSFExport scsf_ColorBreaksColorTraderShortWithReversal(SCStudyInterfaceRef sc) {
+    // THIS IS STILL WIP
 
-    SCInputRef EOSSignal = sc.Input[0];
-    SCInputRef VVAStudy = sc.Input[1];
-    SCInputRef MaxTarget = sc.Input[2];
-    SCInputRef LongQuantity = sc.Input[4];
-    SCInputRef EndTradingTime = sc.Input[5];
-    SCInputRef MaxDailyPLInTicks = sc.Input[6];
-    SCInputRef MinDailyPLInTicks = sc.Input[7];
-    SCInputRef MarketIfTouched = sc.Input[8];
+    SCInputRef CBCSignal = sc.Input[0];
+    SCInputRef CBCStopLoss = sc.Input[1];
+    SCInputRef CBCReversalSignal = sc.Input[2];
+    SCInputRef CBCReversalStopLoss = sc.Input[3];
+    SCInputRef AllowReversals = sc.Input[4];
+
+
+    SCInputRef MaxTarget = sc.Input[3];
+    SCInputRef EndTradingTime = sc.Input[4];
+    SCInputRef StartTradingTime = sc.Input[5];
+
+    SCInputRef MaxDailyPLInTicks = sc.Input[5];
+    SCInputRef MinDailyPLInTicks = sc.Input[6];
+    SCInputRef MarketIfTouched = sc.Input[6];
 
 
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
 
-        sc.GraphName = "End of streak trader lag (long+short)";
+        sc.GraphName = "CBC trader with reversal (short)";
 
         // Inputs
-        EOSSignal.Name = "End of streak signal";
-        EOSSignal.SetStudyID(1);
+        CBCSignal.Name = "CBC signal";
+        CBCSignal.SetStudySubgraphValues(2,0);
 
-        VVAStudy.Name = "VVA Study";
-        VVAStudy.SetStudyID(1);
+        CBCStopLoss.Name = "CBC stop loss";
+        CBCStopLoss.SetStudySubgraphValues(2,1);
+
+        CBCReversalSignal.Name = "CBC reversal signal";
+        CBCReversalSignal.SetStudySubgraphValues(2,2);
+
+        CBCReversalStopLoss.Name = "CBC reversal stop loss";
+        CBCReversalStopLoss.SetStudySubgraphValues(2,3);
+
+        AllowReversals.Name = "Allow reversals";
+        AllowReversals.SetYesNo(0);
 
         MaxTarget.Name = "Max. target";
         MaxTarget.SetIntLimits(15, 200);
         MaxTarget.SetInt(30);
 
-        LongQuantity.Name = "Long qty";
-        LongQuantity.SetIntLimits(1, 2);
-        LongQuantity.SetInt(1);
-
         EndTradingTime.Name = "End trading time";
-        EndTradingTime.SetTime(HMS_TIME(15,45,0));
+        EndTradingTime.SetTime(HMS_TIME(14,45,0));
+
+        StartTradingTime.Name = "Start trading time";
+        StartTradingTime.SetTime(HMS_TIME(7,0,0));
 
         MaxDailyPLInTicks.Name = "Maximum PL in ticks per day"; // Total quantity that breaks even
         MaxDailyPLInTicks.SetIntLimits(10, 1000);
@@ -498,7 +513,7 @@ SCSFExport scsf_ColorBreaksColorTraderShort(SCStudyInterfaceRef sc) {
 
         // Flags
         sc.HideStudy = true;
-        sc.SupportReversals = false;
+        sc.SupportReversals = true;
         sc.AllowOnlyOneTradePerBar = true;
 
         sc.MaximumPositionAllowed = 3;
@@ -544,70 +559,39 @@ SCSFExport scsf_ColorBreaksColorTraderShort(SCStudyInterfaceRef sc) {
         return;
         }
 
-    SCFloatArray VVAH;
-    SCFloatArray VVAL;
-    sc.GetStudyArrayUsingID(VVAStudy.GetStudyID(), 1, VVAH);
-    sc.GetStudyArrayUsingID(VVAStudy.GetStudyID(), 2, VVAL);
-
     SCFloatArray TradeSignal;
     SCFloatArray StopLoss;
-    sc.GetStudyArrayUsingID(EOSSignal.GetStudyID(), 0, TradeSignal);
-    sc.GetStudyArrayUsingID(EOSSignal.GetStudyID(), 1, StopLoss);
+    SCFloatArray ReversalTradeSignal;
+    SCFloatArray ReversalStopLoss;
+    sc.GetStudyArrayUsingID(CBCSignal.GetStudyID(), CBCSignal.GetSubgraphIndex(), TradeSignal);
+    sc.GetStudyArrayUsingID(CBCStopLoss.GetStudyID(), CBCStopLoss.GetSubgraphIndex(), StopLoss);
+    sc.GetStudyArrayUsingID(CBCReversalSignal.GetStudyID(), CBCSignal.GetSubgraphIndex(), ReversalTradeSignal);
+    sc.GetStudyArrayUsingID(CBCReversalStopLoss.GetStudyID(), CBCStopLoss.GetSubgraphIndex(), ReversalStopLoss);
 
-    if (TradeSignal[i] == 1 && PositionData.PositionQuantity >= 0) {
-        estimatedEntryPrice = sc.Close[i] + sc.TickSize;
-        s_SCNewOrder newOrder;
-        newOrder.OrderQuantity = 1;
-        newOrder.TimeInForce = SCT_TIF_DAY;
-        newOrder.OrderType = SCT_ORDERTYPE_MARKET;
-        newOrder.Stop1Price = StopLoss[i];
-        newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP_LIMIT;
-        newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_STOP_LIMIT;
-
-
-        if (estimatedEntryPrice >= VVAH[i]) {
-            newOrder.Target1Offset = MaxTarget.GetFloat() * sc.TickSize;
-        } else {
-            newOrder.Target1Price = std::min<double>(
-                estimatedEntryPrice > VVAH[i] ? VVAH[i] : VVAL[i],
-                estimatedEntryPrice + sc.TickSize * 70
-                );
+    if (AllowReversals.GetYesNo() == 1) {
+        if (ReversalTradeSignal[i] == -1 && PositionData.PositionQuantity < 0) { // Only revert if there's still a live order
+            s_SCNewOrder newOrder;
+            newOrder.OrderQuantity = 1;
+            newOrder.TimeInForce = SCT_TIF_DAY;
+            newOrder.OrderType = SCT_ORDERTYPE_MARKET;
+            newOrder.Stop1Price = ReversalStopLoss[i];
+            newOrder.Target1Offset = MaxTarget.GetFloat();
+            newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP;
+            newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_STOP_LIMIT;
+            sc.BuyOrder(newOrder);
         }
-
-        newOrder.MoveToBreakEven.Type = MOVETO_BE_ACTION_TYPE_OFFSET_TRIGGERED;
-        newOrder.MoveToBreakEven.BreakEvenLevelOffsetInTicks = 1;
-        newOrder.MoveToBreakEven.TriggerOffsetInTicks = 20;
-
-        sc.BuyOrder(newOrder);
     }
 
     if (TradeSignal[i] == -1 && PositionData.PositionQuantity <= 0) {
-        estimatedEntryPrice = sc.Close[i] - sc.TickSize;
         s_SCNewOrder newOrder;
         newOrder.OrderQuantity = 1;
-
         newOrder.TimeInForce = SCT_TIF_DAY;
         newOrder.OrderType = SCT_ORDERTYPE_MARKET;
         newOrder.Stop1Price = StopLoss[i];
-        newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP_LIMIT;
+        newOrder.Target1Offset = MaxTarget.GetFloat();
+        newOrder.AttachedOrderStopAllType = SCT_ORDERTYPE_STOP;
         newOrder.AttachedOrderTarget1Type = SCT_ORDERTYPE_STOP_LIMIT;
-
-
-        if (estimatedEntryPrice <= VVAL[i]) {
-            newOrder.Target1Offset = MaxTarget.GetFloat() * sc.TickSize;
-        } else {
-            newOrder.Target1Price = std::max<double>(
-                estimatedEntryPrice > VVAH[i] ? VVAH[i] : VVAL[i],
-                estimatedEntryPrice - sc.TickSize * 70
-                );
-        }
-
-        newOrder.MoveToBreakEven.Type = MOVETO_BE_ACTION_TYPE_OFFSET_TRIGGERED;
-        newOrder.MoveToBreakEven.BreakEvenLevelOffsetInTicks = 1;
-        newOrder.MoveToBreakEven.TriggerOffsetInTicks = 20;
-
         sc.SellOrder(newOrder);
-
     }
 
     if (PositionData.OpenProfitLoss / sc.CurrencyValuePerTick >= 105) {
