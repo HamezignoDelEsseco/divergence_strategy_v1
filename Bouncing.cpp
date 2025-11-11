@@ -483,8 +483,6 @@ SCSFExport scsf_VVABouncer(SCStudyInterfaceRef sc) {
             }
         }
     }
-
-
 }
 
 SCSFExport scsf_TrampolineTrader(SCStudyInterfaceRef sc) {

@@ -30,6 +30,7 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
         Bouncing.cpp
         VTISignal.cpp
         VTITrader.cpp
+        ReversalCrossing.cpp
 )
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES
