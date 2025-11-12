@@ -3,32 +3,44 @@
 SCSFExport scsf_ReversalCrossingVVA(SCStudyInterfaceRef sc) {
     // This is WIP (Strategy 9)
 
-    SCInputRef VVAStudy = sc.Input[0];
+    SCInputRef LevelToCrossStudy = sc.Input[0];
     SCInputRef NBStudy = sc.Input[1];
-    SCInputRef DVThresh = sc.Input[2];
-    SCInputRef SignalHitOffsetInTicks = sc.Input[3];
-    SCInputRef StopLossOffsetInTicks = sc.Input[4];
-    SCInputRef MaxRiskInTicks = sc.Input[5];
+    SCInputRef ATRStudy = sc.Input[2];
+    SCInputRef UseATRRatioInsteadOfDV = sc.Input[3];
+    SCInputRef DVThresh = sc.Input[4];
+    SCInputRef ATRatio = sc.Input[5];
+    SCInputRef SignalHitOffsetInTicks = sc.Input[6];
+    SCInputRef StopLossOffsetInTicks = sc.Input[7];
+    SCInputRef MaxRiskInTicks = sc.Input[8];
+    SCInputRef UseLevelAsStop = sc.Input[9];
+
 
     SCSubgraphRef SignalDirection = sc.Subgraph[0];
     SCSubgraphRef SignalLocation = sc.Subgraph[1];
     SCSubgraphRef StopLoss = sc.Subgraph[2];
-    SCSubgraphRef FirstTargetInTicks = sc.Subgraph[3];
+    SCSubgraphRef TradeId = sc.Subgraph[3];
 
     if (sc.SetDefaults) {
         sc.AutoLoop = 1;
 
-        sc.GraphName = "Reversal crossing the VVA";
+        sc.GraphName = "RV X lvl";
 
-        VVAStudy.Name = "VVA indicator";
-        VVAStudy.SetStudySubgraphValues(5,1);
+        LevelToCrossStudy.Name = "Level";
+        LevelToCrossStudy.SetStudySubgraphValues(5,1);
 
         NBStudy.Name = "Number bars study";
         NBStudy.SetStudyID(1);
 
+        ATRStudy.Name = "ATR Study";
+        ATRStudy.SetStudyID(7);
+
         DVThresh.Name = "DV Threshold";
         DVThresh.SetIntLimits(0, 1000);
         DVThresh.SetInt(150);
+
+        ATRatio.Name = "ATR ratio";
+        ATRatio.SetFloatLimits(1, 1000);
+        ATRatio.SetFloat(1.5);
 
         SignalHitOffsetInTicks.Name = "Signal hit offset (in ticks)";
         SignalHitOffsetInTicks.SetIntLimits(0, 50);
@@ -42,67 +54,87 @@ SCSFExport scsf_ReversalCrossingVVA(SCStudyInterfaceRef sc) {
         MaxRiskInTicks.SetIntLimits(0, 50);
         MaxRiskInTicks.SetInt(10);
 
+        UseLevelAsStop.Name = "Use level as stop";
+        UseLevelAsStop.SetYesNo(0);
+
+        UseATRRatioInsteadOfDV.Name = "Use ATR ratio instead of DV";
+        UseATRRatioInsteadOfDV.SetYesNo(0);
+
         // Outputs
-        SignalDirection.Name = "Signal direction";
+        SignalDirection.Name = "Dir";
         SignalDirection.DrawStyle = DRAWSTYLE_HIDDEN;
 
-        StopLoss.Name = "Stop loss price";
-        StopLoss.DrawStyle = DRAWSTYLE_LINE;
-        StopLoss.PrimaryColor = RGB(0, 128, 128);
+        SignalLocation.Name = "Loc";
+        SignalLocation.DrawStyle = DRAWSTYLE_DASH;
 
-        FirstTargetInTicks.Name = "First target (in ticks)";
-        FirstTargetInTicks.DrawStyle = DRAWSTYLE_HIDDEN;
+        StopLoss.Name = "Stop";
+        StopLoss.DrawStyle = DRAWSTYLE_DASH;
+
+        TradeId.Name = "Tid";
+        TradeId.DrawStyle = DRAWSTYLE_HIDDEN;
 
         sc.GraphRegion = 0;
         sc.ScaleRangeType = SCALE_SAMEASREGION;
-
     }
+
     const int currIdx = sc.Index;
     const int prevIdx = currIdx - 1;
-    int& waitForUptick = sc.GetPersistentInt(1);
-    float& priceToUptick = sc.GetPersistentFloat(1);
-
-    int& waitForDownTick = sc.GetPersistentInt(2);
-    float& priceToDownTick = sc.GetPersistentFloat(2);
-
-    float& stopLoss = sc.GetPersistentFloat(3);
-    float& stopLossInTicks = sc.GetPersistentFloat(4);
-
+    int& locationToSignal = sc.GetPersistentInt(1);
+    float& signalDirection = sc.GetPersistentFloat(1);
+    float& signalLocation = sc.GetPersistentFloat(2);
+    float& stopLossPrice = sc.GetPersistentFloat(3);
+    float& tradeId = sc.GetPersistentFloat(4);
 
     SCFloatArray AskVolBidVolDiff;
+    SCFloatArray Level;
+    SCFloatArray ATR;
     sc.GetStudyArrayUsingID(NBStudy.GetStudyID(), 0, AskVolBidVolDiff);
+    sc.GetStudyArrayUsingID(ATRatio.GetStudyID(), 0, ATR);
+    sc.GetStudyArrayUsingID(LevelToCrossStudy.GetStudyID(), LevelToCrossStudy.GetSubgraphIndex(), Level);
 
 
-    SignalLocation[currIdx] = priceToUptick;
+    SignalLocation[currIdx] = signalLocation;
+    SignalDirection[currIdx] = signalDirection;
+    StopLoss[currIdx] = stopLossPrice;
+    TradeId[currIdx] = tradeId;
+
+    locationToSignal = sc.Close[prevIdx-1] < Level[prevIdx-1] ? -1 : sc.Close[prevIdx-1] > Level[prevIdx-1] ? 1 : locationToSignal;
+
     // Only running the study if the bar has enough imbalance
-    if (std::abs(AskVolBidVolDiff[prevIdx]) < DVThresh.GetFloat()) {
-        return;
+    if (UseATRRatioInsteadOfDV.GetYesNo() == 0) {
+        if (std::abs(AskVolBidVolDiff[prevIdx]) < DVThresh.GetFloat()) {
+            return;
+        }
+    } else {
+        if (std::abs(sc.Close[prevIdx] - sc.Open[prevIdx]) < ATRatio.GetFloat() * ATR[prevIdx]) {
+            return;
+        }
     }
 
-    SCFloatArray VVA;
-    sc.GetStudyArrayUsingID(VVAStudy.GetStudyID(), VVAStudy.GetSubgraphIndex(), VVA);
+    const int upDownBar = sc.Close[prevIdx] > sc.Open[prevIdx] ? 1 : -1;
+    const bool crossFromBelow = locationToSignal == -1 && sc.Close[prevIdx] > Level[prevIdx] && upDownBar == 1;
+    const bool crossFromAbove = locationToSignal == 1 && sc.Close[prevIdx] < Level[prevIdx] && upDownBar == -1;
 
-    if (sc.High[prevIdx] >= VVA[prevIdx] && sc.Close[prevIdx] > sc.Open[prevIdx]) {
-        priceToUptick = sc.High[prevIdx];
-        waitForUptick = 1;
+    if (crossFromBelow) {
+        signalLocation = sc.High[prevIdx];
+        signalDirection = 1;
+        tradeId = currIdx;
+        stopLossPrice = std::max<float>(signalLocation - MaxRiskInTicks.GetFloat() * sc.TickSize, sc.Low[prevIdx])
+        - StopLossOffsetInTicks.GetFloat() * sc.TickSize;
+        if (UseLevelAsStop.GetYesNo() == 1) {
+            stopLossPrice = Level[prevIdx]
+            - StopLossOffsetInTicks.GetFloat() * sc.TickSize;
+        }
     }
-
-    if (sc.Close[currIdx] > priceToUptick) {
-        SignalDirection[currIdx] = 1;
-        waitForUptick = 0;
-        priceToUptick = 0;
+    if (crossFromAbove) {
+        signalLocation = sc.Low[prevIdx];
+        signalDirection = -1;
+        tradeId = currIdx;
+        stopLossPrice = std::min<float>(signalLocation + MaxRiskInTicks.GetFloat() * sc.TickSize, sc.High[prevIdx])
+        + StopLossOffsetInTicks.GetFloat() * sc.TickSize;
+        if (UseLevelAsStop.GetYesNo() == 1) {
+            stopLossPrice = Level[prevIdx]
+            + StopLossOffsetInTicks.GetFloat() * sc.TickSize;
+        }
     }
-
-    if (sc.Low[prevIdx] <= VVA[prevIdx] && sc.Close[prevIdx] > sc.Open[prevIdx]) {
-        priceToUptick = sc.High[prevIdx];
-        waitForUptick = 1;
-    }
-
-    if (sc.Close[currIdx] > priceToUptick) {
-        SignalDirection[currIdx] = 1;
-        waitForUptick = 0;
-        priceToUptick=0;
-    }
-
-
 }
