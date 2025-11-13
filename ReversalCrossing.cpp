@@ -112,8 +112,11 @@ SCSFExport scsf_ReversalCrossingVVA(SCStudyInterfaceRef sc) {
     }
 
     const int upDownBar = sc.Close[prevIdx] > sc.Open[prevIdx] ? 1 : -1;
-    const bool crossFromBelow = locationToSignal == -1 && sc.Close[prevIdx] > Level[prevIdx] && upDownBar == 1;
-    const bool crossFromAbove = locationToSignal == 1 && sc.Close[prevIdx] < Level[prevIdx] && upDownBar == -1;
+    //const bool crossFromBelow = locationToSignal == -1 && sc.Close[prevIdx] > Level[prevIdx] && upDownBar == 1;
+    //const bool crossFromAbove = locationToSignal == 1 && sc.Close[prevIdx] < Level[prevIdx] && upDownBar == -1;
+    const bool crossing =  sc.Low[prevIdx] < Level[prevIdx] && sc.High[prevIdx] > Level[prevIdx];
+    const bool crossFromBelow = upDownBar == 1 && crossing;
+    const bool crossFromAbove = upDownBar == -1 && crossing;
 
     if (crossFromBelow) {
         signalLocation = sc.High[prevIdx];
