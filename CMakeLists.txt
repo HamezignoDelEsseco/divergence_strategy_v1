@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.0)
 
-include_directories("D:\\SierraChartCME\\ACS_Source" "{CMAKE_SOURCE_DIR}")
+include_directories("D:\\Sierra Chart\\ACS_Source" "{CMAKE_SOURCE_DIR}")
 
 message(STATUS "Source dir: ${CMAKE_SOURCE_DIR}")
 message(STATUS "Binary dir: ${CMAKE_BINARY_DIR}")
@@ -27,8 +27,23 @@ add_library(TRADE_DIVERGENCE_MODE_1 SHARED Studies.cpp
         FollowTheStreak.cpp
         TrendAndEOSSignal.cpp
         BigBarScalping.cpp
+        ValueAreaCrossSignal.cpp
+        ValueAreaCrossTrader.cpp
+        TrendlineBreakoutTraderAlex.cpp
+        TrendlineBreakoutReverseAlex.cpp
+        DeltaVolumeMomentumAlex.cpp
+        DeltaVolumeMomentumAlexTrading.cpp
+        MomentumAfterStrikeAlex.cpp
+        MomentumAfterStrikeAlexRobust.cpp
+        MomentumAfterStrikeAlexRobustTrading.cpp
+        HawkesVolatilityAlex.cpp
+        MACD_MomentumSignalAlex.cpp
+        MACD_MomentumSignalAlexTrading.cpp
+        VALevelSignalAlex.cpp
+        VALevelSignalAlexTrading.cpp
+        VASimpleCrossAlex.cpp
 )
 
 set_target_properties(TRADE_DIVERGENCE_MODE_1 PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "D:\\SierraChartCME\\Data" OUTPUT_NAME "deltaVolStudies"
+        RUNTIME_OUTPUT_DIRECTORY "D:\\Sierra Chart\\Data" OUTPUT_NAME "deltaVolStudies"
 )
